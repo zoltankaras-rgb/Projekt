@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Objednávkový systém - MIK s.r.o.</title>
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/b2c_style.css') }}">
+    <style>
+        .loyalty-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #fffbe6;
+            border: 1px solid #facc15;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .loyalty-info p { margin: 0; font-weight: bold; color: #713f12; }
+        .loyalty-info button { margin: 0; width: auto; padding: 8px 12px; font-size: 0.9em; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s; }
+        .modal-overlay.visible { opacity: 1; visibility: visible; }
+        .modal-content { background-color: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; max-height: 80vh; overflow-y: auto; transform: scale(0.9); transition: transform 0.3s; }
+        .modal-overlay.visible .modal-content { transform: scale(1); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1rem; }
+        .modal-header h4 { margin: 0; font-size: 1.25rem; }
+        .modal-close { font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; background: none; border: none; }
+
+        .min-order-warning {
+            color: var(--primary-color);
+            font-weight: bold;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        /* Štýl pre tlačidlo na poznámku a checkbox */
+        .by-piece-button {
+            background: none;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 4px 8px;
+            font-size: 0.8em;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="https://www.miksro.sk/wp-content/uploads/2025/09/Dizajn-bez-nazvu-1.png" alt="Logo MIK s.r.o." class="logo">
+            <div id="header-auth-links" class="header-auth-links"></div>
+        </header>
+
+        <div id="loggedOutView">
+            <div id="public-pricelist-container"></div>
+            <div id="auth-section" class="auth-section">
+                 <div class="tab-nav">
+                    <button class="tab-button active" data-tab="login">Prihlásenie</button>
+                    <button class="tab-button" data-tab="register">Nová registrácia</button>
+                </div>
+                <div id="login-tab" class="tab-content active">
+                    <h3>Prihlásenie</h3>
+                    <form id="loginForm">
+                        <div class="form-group"><label for="login-email">E-mail</label><input type="email" name="email" id="login-email" required></div>
+                        <div class="form-group"><label for="login-password">Heslo</label><input type="password" name="password" id="login-password" required></div>
+                        <button type="submit" class="button">Prihlásiť sa</button>
+                    </form>
+                </div>
+                <div id="register-tab" class="tab-content">
+                    <h3>Registrácia</h3>
+                    <form id="registerForm">
+                        <div class="form-group"><label for="reg-name">Meno a Priezvisko</label><input type="text" id="reg-name" name="name" required></div>
+                        <div class="form-group"><label for="reg-email">E-mail</label><input type="email" id="reg-email" name="email" required></div>
+                        <div class="form-group"><label for="reg-phone">Telefón</label><input type="tel" id="reg-phone" name="phone" required></div>
+                        <div class="form-group"><label for="reg-address">Fakturačná adresa</label><input type="text" id="reg-address" name="address" required></div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="same-address-checkbox" checked>
+                                Doručovacia adresa je rovnaká ako fakturačná
+                            </label>
+                        </div>
+                        <div id="delivery-address-group" class="form-group hidden">
+                            <label for="reg-delivery-address">Adresa doručenia</label>
+                            <input type="text" id="reg-delivery-address" name="delivery_address">
+                        </div>
+                        <div class="form-group"><label for="reg-password">Heslo (min. 6 znakov)</label><input type="password" id="reg-password" name="password" required></div>
+                        <div class="form-group">
+                             <label class="checkbox-label">
+                                <input type="checkbox" id="reg-gdpr" name="gdpr" required>
+                                Súhlasím so spracovaním osobných údajov.
+                            </label>
+                        </div>
+                        <button type="submit" class="button">Zaregistrovať sa</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="loggedInView" class="hidden">
+            <h2 class="welcome-message">Vitajte, <span id="customer-name"></span>!</h2>
+            <div id="loyalty-info" class="loyalty-info">
+                <p>Vaše vernostné body: <span id="customer-points">0</span></p>
+                <button id="claim-reward-btn" class="button" style="background-color: #16a34a;" onclick="showRewardsModal()">Uplatniť odmenu</button>
+            </div>
+            <div id="customer-main-tabs">
+                <div class="tab-nav">
+                    <button class="tab-button active" data-tab="order-content">Nová objednávka</button>
+                    <button class="tab-button" data-tab="history-content">Moje objednávky</button>
+                </div>
+                <div id="order-content" class="tab-content active">
+                    <form id="orderForm">
+                        <div id="order-pricelist-container"></div>
+                        <div id="order-summary-section" class="hidden">
+                             <h3>Súhrn a doručenie</h3>
+                             <div class="form-group">
+                                <label for="deliveryDate">Požadovaný dátum vyzdvihnutia:</label>
+                                <input type="date" id="deliveryDate" name="deliveryDate" required>
+                             </div>
+                             <div class="form-group">
+                                 <label for="orderNote">Poznámka k objednávke:</label>
+                                 <textarea id="orderNote" name="orderNote" rows="3"></textarea>
+                             </div>
+                             <div class="total-summary">
+                                 <div id="total-price">Suma objednávky: <strong>0.00 €</strong></div>
+                                 <div id="min-order-warning" class="min-order-warning hidden">Minimálna hodnota objednávky je 20.00 €</div>
+                             </div>
+                             <button type="submit" class="button">Odoslať objednávku</button>
+                        </div>
+                    </form>
+                </div>
+                <div id="history-content" class="tab-content">
+                    <h3>História objednávok</h3>
+                    <div id="history-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rewards-modal" class="modal-overlay">
+       <div class="modal-content">
+            <div class="modal-header">
+                <h4>Vyberte si odmenu</h4>
+                <button class="modal-close" onclick="closeModal('rewards-modal')">&times;</button>
+            </div>
+            <p>Máte <strong id="modal-customer-points">0</strong> bodov.</p>
+            <div id="rewards-list-container">Načítavam dostupné odmeny...</div>
+        </div>
+    </div>
+
+    <div id="item-note-modal" class="modal-overlay">
+       <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="item-note-modal-title"></h4>
+                <button class="modal-close" onclick="closeModal('item-note-modal')">&times;</button>
+            </div>
+            <p>Zadali ste objednávku na kusy. Ak máte špecifickú požiadavku (napr. počet kusov, počet nožičiek), uveďte ju prosím do poznámky.</p>
+            <div class="form-group">
+                <label for="item-note-input">Poznámka k položke:</label>
+                <textarea id="item-note-input" rows="3"></textarea>
+            </div>
+            <button id="save-item-note-btn" class="button">Potvrdiť</button>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/b2c.js') }}"></script>
+</body>
+</html>
+

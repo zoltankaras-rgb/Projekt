@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B2B Portál - MIK s.r.o.</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root { 
+            --primary-color: #b91c1c; --primary-color-dark: #991b1b; --secondary-color: #f3f4f6; 
+            --text-color: #1f2937; --border-color: #d1d5db; --white: #ffffff; 
+            --info-bg: #eff6ff; --info-text: #1e40af; --border-radius: 8px;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--secondary-color); color: var(--text-color); margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; box-sizing: border-box; }
+        .portal-container { width: 100%; max-width: 1200px; background-color: var(--white); padding: 30px 40px; border-radius: var(--border-radius); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); margin-top: 2rem; margin-bottom: 2rem; }
+        .auth-container { max-width: 450px; margin: auto; }
+        .logo { max-width: 250px; height: auto; display: block; margin: 0 auto 30px auto; }
+        h2 { text-align: center; color: var(--text-color); font-size: 1.5rem; margin-bottom: 25px; }
+        h3 { color: var(--primary-color); border-bottom: 2px solid var(--border-color); padding-bottom: 10px; margin-top: 30px;}
+        .tab-nav { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 25px; }
+        .tab-button { flex-grow: 1; padding: 15px; cursor: pointer; border: none; background-color: transparent; font-size: 1rem; font-weight: 600; color: #6b7280; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
+        .tab-button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; font-family: inherit; font-size: 1rem; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.1); outline: none; }
+        .button { background-color: var(--primary-color); color: var(--white); padding: 14px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: background-color 0.2s; width: 100%; margin-top: 10px; }
+        .button:hover { background-color: var(--primary-color-dark); }
+        .hidden { display: none; }
+        #notification { padding: 15px; border-radius: 6px; font-weight: bold; text-align: center; margin-top: 20px; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s, transform 0.5s; }
+        .success { background-color: #dcfce7; color: #16a34a; }
+        .error { background-color: #fee2e2; color: #dc2626; }
+        #loader { text-align: center; padding: 20px; font-weight: bold; color: var(--primary-color); }
+        .footer-link { display: block; text-align: center; margin-top: 20px; color: #6b7280; font-size: 0.9rem; text-decoration: none; }
+        .footer-link:hover { color: var(--primary-color); text-decoration: underline; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 20px;}
+        .header-info { text-align: right; }
+        .announcement-bar { background-color: var(--info-bg); color: var(--info-text); padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+        .gdpr-consent { display: flex; align-items: flex-start; gap: 10px; font-size: 0.8rem; color: #6b7280; margin-top: 15px; }
+        .gdpr-consent input { margin-top: 3px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        th, td { border: 1px solid var(--border-color); padding: 12px; text-align: left; vertical-align: middle;}
+        th { background-color: var(--secondary-color); text-align: center; font-weight: 600;}
+        .order-summary { margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color); display: flex; justify-content: flex-end; }
+        .order-summary-box { width: 100%; max-width: 350px; }
+        .order-summary p { display: flex; justify-content: space-between; margin: 8px 0; font-size: 1.1rem; }
+        .order-summary p.total { font-weight: bold; font-size: 1.3rem; border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px; }
+        .item-note-button { background: none; border: none; cursor: pointer; color: var(--primary-color); font-size: 1.2rem; }
+        .item-note-button:hover { color: var(--primary-color-dark); }
+        #modal-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; justify-content: center; align-items: center; }
+        .modal-backdrop { position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; padding: 2rem; border-radius: var(--border-radius); z-index: 1001; width: 90%; max-width: 450px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1rem; }
+        .modal-header h4 { margin: 0; font-size: 1.2rem; }
+        .close-button { background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="portal-container">
+        <img src="https://www.miksro.sk/wp-content/uploads/2025/09/Dizajn-bez-nazvu-1.png" alt="Logo MIK s.r.o." class="logo">
+        <div id="notification" class="hidden"></div>
+        <div id="loader" class="hidden">Načítavam...</div>
+        
+        <div id="auth-views">
+            <div id="view-auth" class="auth-container">
+                <div class="tab-nav"><button class="tab-button active" data-tab="login">Prihlásenie</button><button class="tab-button" data-tab="register">Nová registrácia</button></div>
+                <div id="login-form-container"><form id="loginForm"><div class="form-group"><label for="login-id">Číslo odberateľa / Login</label><input type="text" id="login-id" name="zakaznik_id" required></div><div class="form-group"><label for="login-password">Heslo</label><input type="password" id="login-password" name="password" required></div><button type="submit" class="button">Prihlásiť sa</button></form><a href="#" id="forgot-password-link" class="footer-link">Zabudli ste heslo?</a></div>
+                <div id="register-form-container" class="hidden">
+                    <form id="registerForm">
+                        <div class="form-group"><label for="reg-name">Názov Zariadenia (Spoločnosti)</label><input type="text" id="reg-name" name="nazov_firmy" required></div>
+                        <div class="form-group"><label for="reg-address">Adresa spoločnosti (fakturačná)</label><input type="text" id="reg-address" name="adresa" required></div>
+                        <!-- START CHANGE: Added new field for delivery address -->
+                        <div class="form-group"><label for="reg-delivery-address">Adresa doručenia tovaru</label><input type="text" id="reg-delivery-address" name="adresa_dorucenia" required></div>
+                        <!-- END CHANGE -->
+                        <div class="form-group"><label for="reg-email">Kontaktný E-mail</label><input type="email" id="reg-email" name="email" required></div>
+                        <div class="form-group"><label for="reg-phone">Telefón</label><input type="tel" id="reg-phone" name="telefon" required></div>
+                        <div class="form-group"><label for="reg-password">Heslo (min. 6 znakov)</label><input type="password" id="reg-password" name="password" required minlength="6"></div>
+                        <div class="gdpr-consent"><input type="checkbox" id="gdpr-checkbox" name="gdpr" required><label for="gdpr-checkbox">Súhlasím so spracovaním osobných údajov. Vaše údaje (názov, adresa, e-mail, telefón) uchovávame bezpečne a slúžia výhradne na účely spracovania objednávok, doručenia tovaru a nevyhnutného kontaktu v prípade nejasností.</label></div>
+                        <button type="submit" class="button">Zaregistrovať sa</button>
+                    </form>
+                </div>
+            </div>
+            <div id="view-password-reset-request" class="auth-container hidden"><h2>Obnova hesla</h2><form id="passwordResetRequestForm"><div class="form-group"><label for="reset-email">E-mail</label><input type="email" id="reset-email" name="email" required></div><button type="submit" class="button">Odoslať žiadosť</button></form><a href="#" class="footer-link back-to-login-link">Späť na prihlásenie</a></div>
+            <div id="view-password-reset-form" class="auth-container hidden"><h2>Nové heslo</h2><form id="passwordResetForm"><input type="hidden" id="reset-token-input" name="token"><div class="form-group"><label for="new-password">Nové heslo</label><input type="password" id="new-password" name="password" required minlength="6"></div><div class="form-group"><label for="confirm-password">Potvrdiť heslo</label><input type="password" id="confirm-password" name="confirm-password" required></div><button type="submit" class="button">Nastaviť heslo</button></form><a href="#" class="footer-link back-to-login-link">Späť na prihlásenie</a></div>
+        </div>
+
+        <div id="view-customer-portal" class="hidden">
+            <div class="header">
+                <h2>Zákaznícka zóna</h2>
+                <div class="header-info">Prihlásený: <strong id="customer-name"></strong><br><a href="#" id="logout-link" class="footer-link" style="margin-top: 5px;">Odhlásiť sa</a></div>
+            </div>
+            <div id="announcement-bar" class="announcement-bar hidden"></div>
+            
+            <div class="tab-nav">
+                <button id="tab-btn-order" class="tab-button active" onclick="showPortalView('view-new-order')">Nová objednávka</button>
+                <button id="tab-btn-history" class="tab-button" onclick="showPortalView('view-order-history')">História objednávok</button>
+            </div>
+            <div id="customer-dynamic-content"></div>
+            <div id="portal-views-container">
+                <div id="view-new-order">
+                    <h3>Vytvoriť objednávku</h3>
+                    <div class="form-group">
+                        <label for="pricelist-select">Zvoľte cenník:</label>
+                        <select id="pricelist-select" onchange="loadProductsForPricelist(this.value)"></select>
+                    </div>
+                    <div id="products-container"></div>
+                    
+                    <div id="order-form-details" class="hidden">
+                        <h3>Detaily a odoslanie</h3>
+                        <div class="form-group">
+                            <label for="delivery-date">Požadovaný dátum dodania:</label>
+                            <input type="date" id="delivery-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="order-note">Poznámka k objednávke:</label>
+                            <textarea id="order-note" rows="3"></textarea>
+                        </div>
+                        <div id="order-summary" class="order-summary"></div>
+                        <button class="button" onclick="submitOrder()">Odoslať objednávku</button>
+                    </div>
+                </div>
+
+              <!-- Sekcia História objednávok -->
+<div id="view-order-history" style="display: none;">
+  <div id="history-container"></div>
+</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modal-container"></div>
+    <script>
+        // --- Globálne premenné a stav aplikácie ---
+        let appState = {
+            userData: null,
+            products: [],
+            order: {}
+        };
+        
+        // --- API Komunikácia ---
+        async function apiRequest(endpoint, options = {}) {
+            document.getElementById('loader').style.display = 'block';
+            try {
+                const response = await fetch(endpoint, {
+                    method: options.method || 'GET',
+                    headers: {'Content-Type': 'application/json', ...options.headers},
+                    body: options.body ? JSON.stringify(options.body) : null
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Neznáma chyba servera.');
+                }
+                return data;
+            } catch (error) {
+                showNotification(error.message, true);
+                throw error;
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+        
+        // --- Zobrazovanie notifikácií ---
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = isError ? 'error' : 'success';
+            notification.style.display = 'block';
+            setTimeout(() => { notification.style.display = 'none'; }, 5000);
+        }
+
+        // --- Overenie session pri načítaní stránky ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            if (token) {
+                showPasswordResetForm(token);
+            }
+            // Event Listeners pre formuláre
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('registerForm').addEventListener('submit', handleRegister);
+            document.getElementById('passwordResetRequestForm').addEventListener('submit', handlePasswordResetRequest);
+            document.getElementById('passwordResetForm').addEventListener('submit', handlePasswordReset);
+            document.getElementById('forgot-password-link').addEventListener('click', (e) => { e.preventDefault(); showAuthView('view-password-reset-request'); });
+            document.querySelectorAll('.back-to-login-link').forEach(link => {
+                link.addEventListener('click', (e) => { e.preventDefault(); showAuthView('view-auth'); });
+            });
+            document.querySelectorAll('.tab-button[data-tab]').forEach(button => {
+                button.addEventListener('click', () => switchAuthTab(button.dataset.tab));
+            });
+            document.getElementById('logout-link').addEventListener('click', (e) => { e.preventDefault(); logout(); });
+        });
+
+        // --- Správa prihlasovacích pohľadov ---
+        function showAuthView(viewId) {
+            document.querySelectorAll('#auth-views > div').forEach(view => view.style.display = 'none');
+            document.getElementById(viewId).style.display = 'block';
+        }
+
+        function switchAuthTab(tabId) {
+            document.querySelectorAll('.tab-button[data-tab]').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.tab-button[data-tab="${tabId}"]`).classList.add('active');
+            if (tabId === 'login') {
+                document.getElementById('login-form-container').style.display = 'block';
+                document.getElementById('register-form-container').style.display = 'none';
+            } else {
+                document.getElementById('login-form-container').style.display = 'none';
+                document.getElementById('register-form-container').style.display = 'block';
+            }
+        }
+        
+        // --- Spracovanie formulárov ---
+        async function handleLogin(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            try {
+                const result = await apiRequest('/api/b2b/login', { method: 'POST', body: data });
+                showNotification(result.message);
+                initializeCustomerPortal(result.userData);
+            } catch (error) { /* Chyba je už zobrazená v apiRequest */ }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            try {
+                const result = await apiRequest('/api/b2b/register', { method: 'POST', body: data });
+                showNotification(result.message);
+                event.target.reset();
+                switchAuthTab('login');
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+
+        async function handlePasswordResetRequest(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            try {
+                const result = await apiRequest('/api/b2b/request-reset', { method: 'POST', body: data });
+                showNotification(result.message);
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+        
+        function showPasswordResetForm(token) {
+            showAuthView('view-password-reset-form');
+            document.getElementById('reset-token-input').value = token;
+        }
+
+        async function handlePasswordReset(event) {
+            event.preventDefault();
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            if (newPassword !== confirmPassword) {
+                showNotification("Heslá sa nezhodujú.", true);
+                return;
+            }
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            try {
+                const result = await apiRequest('/api/b2b/perform-reset', { method: 'POST', body: data });
+                showNotification(result.message);
+                setTimeout(() => window.location.search = '', 2000);
+                showAuthView('view-auth');
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+        
+        function logout() {
+            appState.userData = null;
+            appState.products = [];
+            appState.order = {};
+            document.getElementById('view-customer-portal').style.display = 'none';
+            document.getElementById('auth-views').style.display = 'block';
+            showAuthView('view-auth');
+        }
+
+        // --- Zákaznícky portál ---
+        function initializeCustomerPortal(userData) {
+            appState.userData = userData;
+            document.getElementById('customer-name').textContent = userData.nazov_firmy;
+            document.getElementById('auth-views').style.display = 'none';
+            document.getElementById('view-customer-portal').style.display = 'block';
+            
+            const announcementBar = document.getElementById('announcement-bar');
+            if (userData.announcement) {
+                announcementBar.textContent = userData.announcement;
+                announcementBar.classList.remove('hidden');
+            } else {
+                announcementBar.classList.add('hidden');
+            }
+
+            const pricelistSelect = document.getElementById('pricelist-select');
+            pricelistSelect.innerHTML = '<option value="">-- Vyberte cenník --</option>';
+            userData.pricelists.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p.id;
+                option.textContent = p.nazov_cennika;
+                pricelistSelect.appendChild(option);
+            });
+            
+            if (userData.pricelists.length === 1) {
+                pricelistSelect.value = userData.pricelists[0].id;
+                loadProductsForPricelist(userData.pricelists[0].id);
+            }
+            
+            showPortalView('view-new-order');
+        }
+
+       function showPortalView(viewId) {
+    document.querySelectorAll('#portal-views-container > div').forEach(v => v.style.display = 'none');
+    document.getElementById(viewId).style.display = 'block';
+    
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    
+    if (viewId === 'view-new-order') {
+        document.getElementById('tab-btn-order').classList.add('active');
+    } else if (viewId === 'view-order-history') {
+        document.getElementById('tab-btn-history').classList.add('active');
+        loadB2BOrderHistory(); // ✅ VOLÁME B2B FUNKCIU
+    }
+}
+
+        
+        async function loadProductsForPricelist(pricelistId) {
+            if (!pricelistId) {
+                document.getElementById('products-container').innerHTML = '';
+                return;
+            }
+            try {
+                const result = await apiRequest('/api/b2b/get-products', { method: 'POST', body: { pricelist_id: pricelistId } });
+                appState.products = result.productsByCategory;
+                renderProducts();
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+
+        function renderProducts() {
+            const container = document.getElementById('products-container');
+            container.innerHTML = '';
+            
+            if (Object.keys(appState.products).length === 0) {
+                container.innerHTML = '<p>Pre tento cenník neboli nájdené žiadne produkty.</p>';
+                return;
+            }
+
+            for (const category in appState.products) {
+                let categoryHtml = `<h3>${category}</h3>`;
+                categoryHtml += '<table><thead><tr><th>Názov</th><th style="width: 120px; text-align: center;">Cena/MJ</th><th style="width: 250px;">Množstvo</th></tr></thead><tbody>';
+                
+                appState.products[category].forEach(p => {
+                    const price = parseFloat(p.cena).toFixed(2);
+                    
+                    let quantityCellContent = `
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px; height: 40px;">
+                            <input type="text" inputmode="decimal" class="quantity-input" data-ean="${p.ean_produktu}" oninput="updateOrder(event)" style="width: 80px; text-align: right;">
+                    `;
+
+                    if (p.mj === 'kg') {
+                        quantityCellContent += `
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="isPiece_${p.ean_produktu}" onchange="togglePieceNote('${p.ean_produktu}')" style="cursor: pointer; width: 18px; height: 18px;">
+                                <label for="isPiece_${p.ean_produktu}" style="font-size: 0.9rem; font-weight: normal; cursor: pointer;">KS</label>
+                                <button id="noteBtn_${p.ean_produktu}" class="item-note-button hidden" onclick="openItemNoteModal('${p.ean_produktu}')" title="Pridať poznámku"><i class="fas fa-edit"></i></button>
+                            </div>
+                        `;
+                    } else {
+                        // Pridanie prázdneho divu na zachovanie rozloženia
+                        quantityCellContent += `<div></div>`;
+                    }
+
+                    quantityCellContent += '</div>';
+                    
+                    categoryHtml += `
+                        <tr data-product-ean="${p.ean_produktu}">
+                            <td>${p.nazov_vyrobku}</td>
+                            <td style="text-align: center;">${price} € / ${p.mj}</td>
+                            <td>${quantityCellContent}</td>
+                        </tr>`;
+                });
+                
+                categoryHtml += '</tbody></table>';
+                container.innerHTML += categoryHtml;
+            }
+        }
+        
+        function updateOrder(event) {
+            const input = event.target;
+            const ean = input.dataset.ean;
+            const value = input.value.replace(',', '.');
+            
+            if (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0) {
+                const product = findProductByEan(ean);
+                appState.order[ean] = {
+                    ean: ean,
+                    name: product.nazov_vyrobku,
+                    price: product.cena,
+                    dph: product.dph,
+                    unit: product.mj,
+                    quantity: parseFloat(value),
+                    item_note: appState.order[ean] ? appState.order[ean].item_note : ''
+                };
+            } else {
+                delete appState.order[ean];
+            }
+            updateSummary();
+        }
+
+        function findProductByEan(ean) {
+            for (const category in appState.products) {
+                const product = appState.products[category].find(p => p.ean_produktu == ean);
+                if (product) return product;
+            }
+            return null;
+        }
+
+        function updateSummary() {
+            const summaryContainer = document.getElementById('order-summary');
+            const orderDetailsContainer = document.getElementById('order-form-details');
+            const orderItems = Object.values(appState.order);
+
+            if (orderItems.length === 0) {
+                summaryContainer.innerHTML = '';
+                orderDetailsContainer.style.display = 'none';
+                return;
+            }
+            
+            let totalNet = 0;
+            let totalVat = 0;
+
+            orderItems.forEach(item => {
+                const itemTotal = item.price * item.quantity;
+                totalNet += itemTotal;
+                totalVat += itemTotal * (1 + (item.dph / 100));
+            });
+            
+            summaryContainer.innerHTML = `
+                <div class="order-summary-box">
+                    <p><span>Cena bez DPH:</span> <strong>${totalNet.toFixed(2)} €</strong></p>
+                    <p class="total"><span>Celkom s DPH:</span> <strong>${totalVat.toFixed(2)} €</strong></p>
+                </div>
+            `;
+            orderDetailsContainer.style.display = 'block';
+        }
+        
+        async function submitOrder() {
+            const deliveryDate = document.getElementById('delivery-date').value;
+            if (!deliveryDate) {
+                showNotification("Zadajte požadovaný dátum dodania.", true);
+                return;
+            }
+            if (Object.keys(appState.order).length === 0) {
+                showNotification("Nemáte v objednávke žiadne položky.", true);
+                return;
+            }
+
+            const orderData = {
+                userId: appState.userData.id,
+                customerName: appState.userData.nazov_firmy,
+                customerEmail: appState.userData.email,
+                items: Object.values(appState.order),
+                deliveryDate: deliveryDate,
+                note: document.getElementById('order-note').value
+            };
+            
+            try {
+                const result = await apiRequest('/api/b2b/submit-order', { method: 'POST', body: orderData });
+                showNotification(result.message);
+                appState.order = {};
+                document.querySelectorAll('.quantity-input').forEach(input => input.value = '');
+                document.getElementById('order-note').value = '';
+                document.getElementById('delivery-date').value = '';
+                updateSummary();
+                showPortalView('view-order-history');
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+
+        async function loadOrderHistory() {
+            try {
+                const result = await apiRequest('/api/b2b/get-order-history', {
+                    method: 'POST',
+                    body: { userId: appState.userData.id }
+                });
+                renderOrderHistory(result.orders);
+            } catch (error) { /* Chyba je už zobrazená */ }
+        }
+
+        function renderOrderHistory(orders) {
+            const container = document.getElementById('order-history-container');
+            if (!orders || orders.length === 0) {
+                container.innerHTML = '<p>Zatiaľ nemáte žiadne objednávky.</p>';
+                return;
+            }
+            
+            let html = '';
+            orders.forEach(order => {
+                const orderDate = new Date(order.datum_objednavky).toLocaleDateString('sk-SK');
+                const deliveryDate = new Date(order.pozadovany_datum_dodania).toLocaleDateString('sk-SK');
+                const total = parseFloat(order.celkova_suma_s_dph).toFixed(2);
+
+                html += `<details class="order-history-item" style="margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: var(--border-radius);">
+                    <summary style="padding: 1rem; cursor: pointer; display: flex; justify-content: space-between; font-weight: 600;">
+                        <span>Obj. č.: ${order.cislo_objednavky} (${orderDate})</span>
+                        <span>Suma: ${total} €</span>
+                    </summary>
+                    <div style="padding: 0 1rem 1rem 1rem;">
+                        <p><strong>Požadované dodanie:</strong> ${deliveryDate}</p>
+                        ${order.poznamka ? `<p><strong>Poznámka:</strong> ${order.poznamka}</p>` : ''}
+                        <h4>Položky:</h4>
+                        <table>
+                            <thead><tr><th>Názov</th><th>Množstvo</th><th>Cena/MJ</th><th>Spolu</th></tr></thead>
+                            <tbody>`;
+                order.items.forEach(item => {
+                    const itemTotal = (item.mnozstvo * item.cena_za_jednotku).toFixed(2);
+                    html += `<tr>
+                                <td>${item.nazov_produktu} ${item.poznamka_k_polozke ? `<small style="display:block; color:#6b7280;">Pozn: ${item.poznamka_k_polozke}</small>`:''}</td>
+                                <td>${item.mnozstvo} ${item.objednana_jednotka}</td>
+                                <td>${parseFloat(item.cena_za_jednotku).toFixed(2)} €</td>
+                                <td>${itemTotal} €</td>
+                             </tr>`;
+                });
+                html += `</tbody></table></div></details>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // --- Funkcie pre poznámky k položkám ---
+        function togglePieceNote(ean) {
+            const checkbox = document.getElementById(`isPiece_${ean}`);
+            const noteBtn = document.getElementById(`noteBtn_${ean}`);
+            if (checkbox.checked) {
+                noteBtn.classList.remove('hidden');
+                openItemNoteModal(ean);
+            } else {
+                noteBtn.classList.add('hidden');
+                if (appState.order[ean]) {
+                    appState.order[ean].item_note = '';
+                }
+            }
+        }
+
+        function openItemNoteModal(ean) {
+            const product = findProductByEan(ean);
+            const currentNote = appState.order[ean] ? appState.order[ean].item_note : '';
+            const modalHtml = `
+                <div class="modal-backdrop" onclick="closeModal()"></div>
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4>Poznámka k položke: ${product.nazov_vyrobku}</h4>
+                        <button class="close-button" onclick="closeModal()">&times;</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-note-input">Zadajte požiadavku (napr. 150g balenia):</label>
+                        <textarea id="item-note-input" rows="4">${currentNote}</textarea>
+                    </div>
+                    <button class="button" onclick="saveItemNote('${ean}')">Uložiť poznámku</button>
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = modalHtml;
+            document.getElementById('modal-container').style.display = 'flex';
+        }
+
+        function saveItemNote(ean) {
+            const note = document.getElementById('item-note-input').value;
+            if (appState.order[ean]) {
+                appState.order[ean].item_note = note;
+            } else {
+                const product = findProductByEan(ean);
+                appState.order[ean] = {
+                    ean: ean, name: product.nazov_vyrobku, price: product.cena,
+                    dph: product.dph, unit: product.mj, quantity: 0,
+                    item_note: note
+                };
+            }
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById('modal-container').style.display = 'none';
+            document.getElementById('modal-container').innerHTML = '';
+        }
+
+    </script>
+ <script src="static/js/b2b_app.js"></script>
+
+</body>
+</html>

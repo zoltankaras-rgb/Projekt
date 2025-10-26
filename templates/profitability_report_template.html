@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body { font-family: 'Roboto', Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 10mm; background-color: #f3f4f6; }
+        .report-container { width: 100%; max-width: 900px; margin: 0 auto; background-color: #fff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); padding: 15mm; }
+        .report-header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+        .report-header h1 { font-size: 18pt; color: #111; margin: 0; }
+        .report-header p { font-size: 11pt; color: #666; margin: 5px 0 0 0; }
+        h2 { font-size: 14pt; color: #333; margin-top: 30px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        h3 { font-size: 12pt; color: #444; margin-top: 20px; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 9pt; }
+        th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f7f7f7; font-weight: 700; color: #444; }
+        .summary-table td:first-child { font-weight: bold; width: 60%; }
+        .total-row td { font-weight: bold; background-color: #f0f0f0; }
+        .no-print { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        
+        @media print {
+            body { padding: 5mm; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: #fff; }
+            .report-container { box-shadow: none; padding: 0; }
+            .no-print { display: none; }
+            .report-header { margin-bottom: 15px; padding-bottom: 10px; }
+            .report-header h1 { font-size: 16pt; }
+            h2 { font-size: 12pt; margin-top: 15px; }
+            table { margin-top: 10px; page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; }
+            .calculation-block { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <button class="no-print" onclick="window.print()">Tlačiť</button>
+        <div class="report-header">
+            <h1>{{ title }}</h1>
+            <p>Report pre obdobie: {{ period }} | Vygenerované: {{ today }}</p>
+        </div>
+
+        {% if report_type == 'summary' %}
+            <h2>Celkový Prehľad</h2>
+            <table class="summary-table">
+                <tr><td>Zisk z Expedície</td><td>{{ "%.2f"|format(data.calculations.expedition_profit or 0) }} €</td></tr>
+                <tr><td>Zisk z Rozrábky</td><td>{{ "%.2f"|format(data.calculations.butchering_profit or 0) }} €</td></tr>
+                <tr><td>Zisk z Výroby</td><td>{{ "%.2f"|format(data.calculations.production_profit or 0) }} €</td></tr>
+                <tr class="total-row"><td>Celkové náklady</td><td>{{ "%.2f"|format(data.department_data.general_costs or 0) }} €</td></tr>
+                <tr class="total-row" style="font-size: 1.2em;"><td>Celkový Firemný Zisk</td><td>{{ "%.2f"|format(data.calculations.total_profit or 0) }} €</td></tr>
+            </table>
+        {% endif %}
+
+        {% if report_type == 'departments' %}
+            <h2>Výnosy Oddelení</h2>
+            <h3>Expedícia</h3>
+            <table class="summary-table">
+                <tr><td>Zásoba (predch. mesiac)</td><td>{{ "%.2f"|format(data.department_data.exp_stock_prev or 0) }} €</td></tr>
+                <tr><td>+ Tovar z rozrábky</td><td>{{ "%.2f"|format(data.department_data.exp_from_butchering or 0) }} €</td></tr>
+                <tr><td>+ Tovar z výroby</td><td>{{ "%.2f"|format(data.department_data.exp_from_prod or 0) }} €</td></tr>
+                <tr><td>+ Tovar cudzí</td><td>{{ "%.2f"|format(data.department_data.exp_external or 0) }} €</td></tr>
+                <tr><td>- Vrátený tovar</td><td>{{ "%.2f"|format(data.department_data.exp_returns or 0) }} €</td></tr>
+                <tr><td>- Zásoba (aktuálny mesiac)</td><td>{{ "%.2f"|format(data.department_data.exp_stock_current or 0) }} €</td></tr>
+                <tr><td>Tržba (aktuálny mesiac)</td><td>{{ "%.2f"|format(data.department_data.exp_revenue or 0) }} €</td></tr>
+                <tr class="total-row"><td>Zisk z Expedície</td><td>{{ "%.2f"|format(data.calculations.expedition_profit or 0) }} €</td></tr>
+            </table>
+            <h3>Rozrábka</h3>
+            <table class="summary-table">
+                <tr><td>Zisk (Mäso z rozrábky - Zaplatený tovar)</td><td>{{ "%.2f"|format(data.calculations.butchering_profit or 0) }} €</td></tr>
+                <tr><td>Precenenie (Rozrábka + Vrátenka)</td><td>{{ "%.2f"|format(data.calculations.butchering_revaluation or 0) }} €</td></tr>
+            </table>
+        {% endif %}
+        
+        {% if report_type == 'production' %}
+            <h2>Ziskovosť Výroby</h2>
+            <table>
+                <thead><tr><th>Produkt</th><th>Predaj (kg)</th><th>Výrobná cena (€/jed)</th><th>Príjem Exp. (€/jed)</th><th>Zisk (€)</th></tr></thead>
+                <tbody>
+                    {% for row in data.production_view.rows %}
+                    <tr>
+                        <td>{{ row.name }}</td>
+                        <td>{{ "%.2f"|format(row.exp_sales_kg or 0) }}</td>
+                        <td>{{ "%.4f"|format(row.production_cost or 0) }}</td>
+                        <td>{{ "%.4f"|format(row.transfer_price or 0) }}</td>
+                        <td>{{ "%.2f"|format(row.profit or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row"><td colspan="4">Celkový zisk z výroby</td><td>{{ "%.2f"|format(data.calculations.production_profit or 0) }} €</td></tr>
+                </tbody>
+            </table>
+        {% endif %}
+
+        {% if report_type == 'sales_channels' %}
+            <h2>Predajné Kanály</h2>
+            {% for channel, channel_data in data.sales_channels_view.items() %}
+                <h3>{{ channel }}</h3>
+                <table>
+                    <thead><tr><th>Produkt</th><th>Predaj (kg)</th><th>Nák. cena (€/kg)</th><th>Pred. cena (€/kg)</th><th>Zisk/kg (€)</th><th>Zisk Celkom (€)</th></tr></thead>
+                    <tbody>
+                        {% for item in channel_data['items'] %}
+                        <tr>
+                            <td>{{ item.product_name }}</td>
+                            <td>{{ "%.2f"|format(item.sales_kg or 0) }}</td>
+                            <td>{{ "%.4f"|format(item.purchase_price_net or 0) }}</td>
+                            <td>{{ "%.4f"|format(item.sell_price_net or 0) }}</td>
+                            <td>{{ "%.2f"|format(item.profit_per_kg or 0) }}</td>
+                            <td>{{ "%.2f"|format(item.total_profit_eur or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>Pre toto obdobie neexistujú žiadne predajné kanály.</p>
+            {% endfor %}
+        {% endif %}
+
+        {% if report_type == 'calculations' %}
+            <h2>Kalkulácie a Súťaže</h2>
+            {% for calc in data.calculations_view.calculations %}
+                <div class="calculation-block">
+                    <h3>{{ calc.name }}</h3>
+                    <p><strong>Doprava:</strong> Vzdialenosť {{ calc.distance_km or 0 }} km, Náklady: {{ "%.2f"|format(calc.transport_cost or 0) }} €</p>
+                    <table>
+                        <thead><tr><th>Produkt</th><th>Množstvo (kg)</th><th>Nák. cena (€/kg)</th><th>Pred. cena (€/kg)</th><th>Zisk (€)</th></tr></thead>
+                        <tbody>
+                            {% set total_profit = namespace(value=0) %}
+                            {# --- ZAČIATOK OPRAVY: Použitý jednoznačný prístup k zoznamu položiek --- #}
+                            {% for item in calc['items'] %}
+                                {% set row_profit = ((item.sell_price_net or 0) - (item.purchase_price_net or 0)) * (item.estimated_kg or 0) %}
+                                {% set total_profit.value = total_profit.value + row_profit %}
+                                <tr>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ "%.2f"|format(item.estimated_kg or 0) }}</td>
+                                    <td>{{ "%.4f"|format(item.purchase_price_net or 0) }}</td>
+                                    <td>{{ "%.4f"|format(item.sell_price_net or 0) }}</td>
+                                    <td>{{ "%.2f"|format(row_profit or 0) }}</td>
+                                </tr>
+                            {% endfor %}
+                            {# --- KONIEC OPRAVY --- #}
+                             <tr class="total-row"><td colspan="4">Zisk pred odrátaním dopravy</td><td>{{ "%.2f"|format(total_profit.value or 0) }} €</td></tr>
+                             <tr class="total-row" style="font-size: 1.1em;"><td colspan="4">Finálny zisk (po odrátaní dopravy)</td><td>{{ "%.2f"|format((total_profit.value or 0) - (calc.transport_cost or 0)) }} €</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Pre toto obdobie neexistujú žiadne kalkulácie.</p>
+            {% endfor %}
+        {% endif %}
+
+    </div>
+</body>
+</html>
+

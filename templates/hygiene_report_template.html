@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body { font-family: 'Roboto', Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 10mm; }
+        .report-container { width: 100%; max-width: 800px; margin: 0 auto; }
+        .report-header { text-align: center; margin-bottom: 25px; }
+        .report-header h1 { font-size: 16pt; margin: 0 0 5px 0; }
+        .report-header p { font-size: 12pt; margin: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9pt; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f2f2f2; font-weight: 700; }
+        .date-header { background-color: #e9ecef; font-weight: bold; text-align: center; }
+        .signatures { margin-top: 60px; page-break-inside: avoid; }
+        .signature-box { display: inline-block; text-align: center; width: 45%; margin: 0 2%; }
+        .signature-line { border-top: 1px solid #333; margin-top: 40px; padding-top: 5px; }
+        .no-print { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        @media print {
+            body { padding: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <button class="no-print" onclick="window.print()">Tlačiť</button>
+        <div class="report-header">
+            <h1>{{ title }}</h1>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Miesto</th>
+                    <th>Úloha</th>
+                    <th>Prostriedok</th>
+                    <th>Konc.</th>
+                    <th>Čas</th>
+                    <th>Vykonal</th>
+                    <th>Skontroloval</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if records %}
+                    {% for group in records | groupby('completion_date') %}
+                        <tr>
+                            <td colspan="7" class="date-header">{{ group.grouper.strftime('%d.%m.%Y') }}</td>
+                        </tr>
+                        {% for record in group.list %}
+                        <tr>
+                            <td>{{ record.location }}</td>
+                            <td>{{ record.task_name }}</td>
+                            <td>{{ record.agent_name or '-' }}</td>
+                            <td>{{ record.concentration or '-' }}</td>
+                            <td>{{ record.exposure_time or '-' }}</td>
+                            <td>{{ record.user_fullname or 'N/A' }}</td>
+                            <td>{{ record.checked_by_fullname or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 20px;">Pre zadané obdobie neboli nájdené žiadne záznamy.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <div class="signatures">
+            <div class="signature-box">
+                <div class="signature-line">Vykonal (podpis)</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line">Skontroloval (podpis)</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

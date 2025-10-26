@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body { font-family: 'Roboto', Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 10mm; background-color: #fff; }
+        .report-container { width: 100%; max-width: 800px; margin: 0 auto; }
+        .report-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+        .report-header h1 { font-size: 20pt; color: #111; margin: 0; }
+        .report-header p { font-size: 11pt; color: #666; margin: 5px 0 0 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9pt; }
+        th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f7f7f7; font-weight: 700; color: #444; }
+        .info-block { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 5px; }
+        .info-block p { margin: 10px 0; font-size: 12pt; }
+        .footer { margin-top: 40px; text-align: left; font-size: 9pt; color: #777; }
+        .barcode-container { text-align: center; margin-top: 20px; }
+        .total-row td { font-weight: bold; background-color: #f9f9f9; }
+        
+        /* --- OPRAVA: Pridané triedy pre farebné odlíšenie --- */
+        .loss { color: #ef4444; font-weight: bold; }
+        .gain { color: #16a34a; font-weight: bold; }
+
+        .no-print { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        @media print {
+            body { padding: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <button class="no-print" onclick="window.print()">Tlačiť</button>
+        <div class="report-header"><h1>{{ title | default('Report') }}</h1><p>{{ report_date | default('') }}</p></div>
+
+        {% if is_accompanying_letter %}
+            <div class="info-block">
+                <p><strong>Produkt:</strong> {{ data.productName | default('N/A') }}</p>
+                <p><strong>EAN:</strong> {{ data.ean | default('N/A') }}</p>
+                <p><strong>Šarža:</strong> <span id="batch-id">{{ data.batchId | default('N/A') }}</span></p>
+                <p><strong>Dátum výroby:</strong> {{ data.productionDate.strftime('%d.%m.%Y') if data.productionDate else 'N/A' }}</p>
+                <p><strong>Prijaté množstvo:</strong> {{ (data.realQtyKs if data.unit == 'ks' else "%.2f"|format(data.realQtyKg)) | safe }} {{ data.unit }}</p>
+            </div>
+            <div class="barcode-container"><svg id="barcode"></svg></div>
+            <div class="footer"><p><strong>Prebral:</strong> {{ data.prebral | default('___________________') }}</p><p><strong>Podpis:</strong> _________________________</p></div>
+        {% endif %}
+
+        {% if is_receipt_report %}
+            <h2>{{ report_info }}</h2>
+            <table>
+                <thead><tr><th>Dátum</th><th>Názov</th><th>Typ</th><th>Množstvo</th><th>Cena/kg</th><th>Hodnota</th><th>Dodávateľ</th></tr></thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr>
+                        <td>{{ row.datum.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ row.nazov_suroviny }}</td>
+                        <td>{{ row.typ }}</td>
+                        <td>{{ "%.2f"|format(row.mnozstvo_kg) }} kg</td>
+                        <td>{{ "%.4f"|format(row.nakupna_cena_eur_kg) }} €</td>
+                        <td>{{ "%.2f"|format(row.mnozstvo_kg * row.nakupna_cena_eur_kg) }} €</td>
+                        <td>{{ row.poznamka_dodavatel }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" style="text-align: center;">Pre zadané kritériá neboli nájdené žiadne záznamy.</td></tr>
+                    {% endfor %}
+                    <tr class="total-row"><td colspan="5">Celková hodnota príjmu</td><td colspan="2">{{ "%.2f"|format(total_value) }} €</td></tr>
+                </tbody>
+            </table>
+        {% endif %}
+
+        {% if is_inventory_report %}
+            <table>
+                <thead><tr><th>Surovina</th><th>Systémový stav</th><th>Reálny stav</th><th>Rozdiel (kg)</th><th>Rozdiel (€)</th></tr></thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr>
+                        <td>{{ row.nazov_suroviny }}</td>
+                        <td>{{ "%.2f"|format(row.systemovy_stav_kg) }} kg</td>
+                        <td>{{ "%.2f"|format(row.realny_stav_kg) }} kg</td>
+                        <!-- --- OPRAVA: Použitie CSS triedy namiesto inline štýlu --- -->
+                        <td class="{{'loss' if row.rozdiel_kg < 0 else 'gain'}}">{{ "%.2f"|format(row.rozdiel_kg) }} kg</td>
+                        <td class="{{'loss' if row.hodnota_rozdielu_eur < 0 else 'gain'}}">{{ "%.2f"|format(row.hodnota_rozdielu_eur) }} €</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align: center;">Pre zadaný dátum neboli nájdené žiadne inventúrne rozdiely.</td></tr>
+                    {% endfor %}
+                    <tr class="total-row"><td colspan="4">Celkový rozdiel v hodnote</td><td>{{ "%.2f"|format(total_diff_value) }} €</td></tr>
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const batchIdEl = document.getElementById('batch-id');
+            if (batchIdEl) {
+                const batchId = batchIdEl.textContent;
+                if (batchId && batchId !== 'N/A') {
+                    try {
+                        JsBarcode("#barcode", batchId, { format: "CODE128", displayValue: true, fontSize: 14, width: 2, height: 60, margin: 10 });
+                    } catch (e) { console.error("Chyba pri generovaní čiarového kódu:", e); }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

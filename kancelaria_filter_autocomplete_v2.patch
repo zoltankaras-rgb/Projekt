@@ -1,0 +1,222 @@
+--- a/static/js/kancelaria_modules/stock.js+++ b/static/js/kancelaria_modules/stock.js@@ -81,16 +81,104 @@ 
+   function loading(){ return el(`<div class="stat-card"><i class="fa-solid fa-spinner fa-spin"></i> Načítavam…</div>`); }
+   function empty(msg="Žiadne dáta"){ return el(`<div class="stat-card">${txt(msg)}</div>`); }
+-
+   // ------------- Suroviny (výrobný sklad) -------------
+-  async function ensureDatalist(shell){
+-    // zabezpeč RM datalist aj vtedy, keď otvoríš intake bez toho, aby si bol v raw
+-    if (qs("#rm-name-dl", shell)) return;
++
++  // ------------- Datalist + krajšie autocomplete (filter podľa kategórie) -------------
++  async function ensureDatalist(shell, category){
++    // Zmaž existujúci datalist, vždy ho tvoríme nanovo pre danú kategóriu
++    const old = document.getElementById("rm-name-dl");
++    if (old) old.remove();
++
++    let names = [];
+     try{
+-      const { items=[] } = await apiRequest("/api/kancelaria/getRawMaterialStockOverview");
+-      const dl = el(`<datalist id="rm-name-dl">${items.map(r => `<option value="${r.nazov}"></option>`).join("")}</datalist>`);
+-      shell.appendChild(dl);
+-    }catch(e){ /* ignore */ }
++      let url = "/api/kancelaria/stock/allowed-names";
++      if (category) url += `?category=${encodeURIComponent(category)}`;
++      const resp = await apiRequest(url);
++      names = Array.isArray(resp?.names) ? resp.names : [];
++    }catch(e){
++      // fallback – natiahni všetky zo skladu, ak by endpoint zlyhal
++      try{
++        const { items=[] } = await apiRequest("/api/kancelaria/getRawMaterialStockOverview");
++        names = items.map(r => r.nazov);
++      }catch(_){}
++    }
++
++    // Ulož dostupné názvy globálne pre autocomplete (použijeme v addLineRow)
++    window.__rmNamesForIntake = names.slice();
++
++    // klasický datalist – ostáva ako fallback a kvôli validácii
++    const dl = el(`<datalist id="rm-name-dl">${names.map(n => `<option value="${n}"></option>`).join("")}</datalist>`);
++    shell.appendChild(dl);
++
++    // vlož CSS pre krajšie roletky (iba raz)
++    if (!document.getElementById("rm-autocomplete-style")){
++      const style = el(`
++        <style id="rm-autocomplete-style">
++          .rm-ac-wrap{ position:relative; }
++          .rm-ac-list{
++            position:absolute; left:0; right:0; top:100%;
++            background:#fff; border:1px solid var(--medium-gray);
++            box-shadow: var(--shadow); max-height: 240px; overflow:auto;
++            border-radius: .5rem; z-index: 50; padding:.25rem 0; display:none;
++          }
++          .rm-ac-item{ padding:.5rem .75rem; cursor:pointer; }
++          .rm-ac-item:hover, .rm-ac-item.active{ background:#f3f4f6; }
++        </style>
++      `);
++      document.head.appendChild(style);
++    }
++  }
++
++  function attachAutocomplete(input, items){
++    if (!input || input.dataset.acBound === "1") return;
++    input.dataset.acBound = "1";
++
++    // zabaľ input aby sme mohli umiestniť zoznam
++    const wrap = document.createElement("div");
++    wrap.className = "rm-ac-wrap";
++    input.parentNode.insertBefore(wrap, input);
++    wrap.appendChild(input);
++
++    const list = document.createElement("div");
++    list.className = "rm-ac-list";
++    wrap.appendChild(list);
++
++    function render(filter){
++      const f = (filter||"").toLowerCase();
++      const opts = items.filter(n => !f || n.toLowerCase().includes(f)).slice(0, 200);
++      list.innerHTML = opts.map(n => `<div class="rm-ac-item" data-v="${n.replace(/"/g,'&quot;')}">${n}</div>`).join("");
++      list.style.display = opts.length ? "block" : "none";
++    }
++
++    input.addEventListener("focus", ()=> render(input.value));
++    input.addEventListener("input", ()=> render(input.value));
++    input.addEventListener("blur", ()=> setTimeout(()=> list.style.display="none", 150));
++    input.addEventListener("keydown", (e)=>{
++      if (e.key === "ArrowDown" || e.key === "ArrowUp"){
++        e.preventDefault();
++        const itemsEls = Array.from(list.querySelectorAll(".rm-ac-item"));
++        if (!itemsEls.length) return;
++        let idx = itemsEls.findIndex(x => x.classList.contains("active"));
++        if (e.key === "ArrowDown") idx = Math.min(itemsEls.length-1, idx+1);
++        else idx = Math.max(0, idx-1);
++        itemsEls.forEach(x => x.classList.remove("active"));
++        itemsEls[idx].classList.add("active");
++      }
++      if (e.key === "Enter"){
++        const active = list.querySelector(".rm-ac-item.active");
++        if (active){
++          input.value = active.dataset.v || "";
++          list.style.display = "none";
++        }
++      }
++    });
++    list.addEventListener("mousedown", (e)=>{
++      const item = e.target.closest(".rm-ac-item");
++      if (!item) return;
++      input.value = item.dataset.v || "";
++      list.style.display = "none";
++    });
++  }
+   }
+ 
+   async function renderRaw(shell){
+@@ -172,18 +260,22 @@ 
+   function addLineRow(tbody){
+     const tr = el(`<tr>
+-      <td><input class="input js-name" list="rm-name-dl" placeholder="Názov suroviny"></td>
++      <td><input class="input js-name" placeholder="Názov suroviny" autocomplete="off"></td>
+       <td><input class="input js-qty" type="number" min="0" step="0.001" placeholder="kg"></td>
+       <td><input class="input js-price" type="number" min="0" step="0.001" placeholder="€/kg"></td>
+       <td><input class="input js-note" placeholder="Poznámka"></td>
+       <td><button class="btn-danger js-del" title="Odstrániť"><i class="fa-solid fa-xmark"></i></button></td>
+     </tr>`);
+-    tr.querySelector('.js-name').setAttribute('list','rm-name-dl');
++    // list removed – vlastný autocomplete
+     tr.querySelector('.js-del').addEventListener('click', ()=> tr.remove());
+     tbody.appendChild(tr);
++    try{ attachAutocomplete(tr.querySelector('.js-name'), (window.__rmNamesForIntake||[])); }catch(e){}
+   }
+ // helper: vráti množinu povolených názvov zo skladu (z datalistu)
+ function getAllowedNamesSet(shell){
++  if (Array.isArray(window.__rmNamesForIntake) && window.__rmNamesForIntake.length){
++    return new Set(window.__rmNamesForIntake.map(n => (n||'').trim().toLowerCase()));
++  }
+   const dl = document.getElementById('rm-name-dl');
+   const set = new Set();
+   if (!dl) return set; // ak by si otvoril príjem úplne prvý bez preloadu – ensureDatalist to hneď dorobí
+@@ -224,6 +316,9 @@ 
+   // vopred 2 riadky
+   addLineRow(tbody); addLineRow(tbody);
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
+ 
+   const actions = el(`
+     <div class="btn-grid" style="margin-top:.75rem">
+@@ -234,7 +329,7 @@   `);
+   card.appendChild(actions);
+ 
+-  actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody));
++  actions.querySelector('.js-add').addEventListener('click', ()=> { addLineRow(tbody); const last=tbody.querySelector('tr:last-child .js-name'); try{ attachAutocomplete(last,(window.__rmNamesForIntake||[])); }catch(e){} });
+ 
+   actions.querySelector('.js-save').addEventListener('click', async ()=>{
+     // 1) pozbieraj riadky
+@@ -253,7 +348,7 @@     // 2) POVOLENÉ názvy – len tie, ktoré už existujú v sklade
+     //    ensureDatalist(shell) by mal bežať pri otvorení príjmu (resp. pri otvorení RAW),
+     //    ale ak by sa stalo, že nie je, zavolaj ho pred týmto krokom.
+-    //    (ak potrebuješ, zavolaj: await ensureDatalist(shell); a daj handler na async)
++    //    (ak potrebuješ, zavolaj: await await ensureDatalist(shell, cat); a daj handler na async)
+     const allowed = getAllowedNamesSet(shell);
+     const bad = rows.filter(r => !allowed.has(r.name.toLowerCase()));
+     if (bad.length){
+@@ -270,6 +365,8 @@       await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
+       alert('Príjem uložený.');
+       tbody.innerHTML=''; addLineRow(tbody); addLineRow(tbody);
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
+     }catch(e){ alert('Chyba: '+e.message); }
+   });
+ 
+@@ -307,6 +404,8 @@     card.appendChild(table);
+     const tbody = table.querySelector('tbody');
+     addLineRow(tbody); addLineRow(tbody);
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
+ 
+     const actions = el(`
+       <div class="btn-grid" style="margin-top:.75rem">
+@@ -317,7 +416,7 @@     `);
+     card.appendChild(actions);
+ 
+-    actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody));
++    actions.querySelector('.js-add').addEventListener('click', ()=> { addLineRow(tbody); const last=tbody.querySelector('tr:last-child .js-name'); try{ attachAutocomplete(last,(window.__rmNamesForIntake||[])); }catch(e){} });
+     actions.querySelector('.js-save').addEventListener('click', async ()=>{
+       const supplier_id = supWrap.querySelector('.js-supplier').value;
+       if (!supplier_id){ alert('Vyber dodávateľa.'); return; }
+@@ -336,6 +435,8 @@         await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
+         alert('Príjem uložený.');
+         tbody.innerHTML=''; addLineRow(tbody); addLineRow(tbody);
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
++    qsa('.js-name', tbody).forEach(inp=>{ try{ attachAutocomplete(inp, (window.__rmNamesForIntake||[])); }catch(e){} });
+       }catch(e){ alert('Chyba: '+e.message); }
+     });
+ 
+@@ -359,10 +460,10 @@     body.appendChild(tabs);
+     body.appendChild(host);
+ 
+-    function openCat(cat){
++    async function openCat(cat){
+       host.innerHTML = "";
+       // zabezpeč datalist, ak ešte nie je
+-      ensureDatalist(shell);
++      await ensureDatalist(shell, cat);
+       if (cat === "maso") host.appendChild(buildIntakeMaso(shell));
+       else host.appendChild(buildIntakeNonMaso(shell, cat));
+       qsa(".js-tab", tabs).forEach(b => b.classList.toggle("btn-primary", b.dataset.cat===cat));
+
+--- a/office_handler.py+++ b/office_handler.py@@ -1030,14 +1030,14 @@     elif cat == 'obal':
+         sql = """
+             SELECT nazov FROM sklad
+-            WHERE typ='obal' OR LOWER(typ) LIKE 'obal%'
++            WHERE typ='obal' OR LOWER(typ) LIKE 'obal%%'
+             ORDER BY nazov
+         """
+         params = ()
+     elif cat == 'pomocny_material':
+         sql = """
+             SELECT nazov FROM sklad
+-            WHERE typ='pomocny_material' OR LOWER(typ) LIKE 'pomocny%'
++            WHERE typ='pomocny_material' OR LOWER(typ) LIKE 'pomocny%%'
+             ORDER BY nazov
+         """
+         params = ()

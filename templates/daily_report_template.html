@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <title>Denný Protokol o Prevzatí Tovaru</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body { font-family: 'Roboto', Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 10mm; background-color: #fff; }
+        .report-container { width: 100%; max-width: 800px; margin: 0 auto; }
+        .report-header { text-align: center; margin-bottom: 25px; }
+        .report-header h1 { font-size: 16pt; margin: 0 0 5px 0; }
+        .report-header p { font-size: 12pt; margin: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9pt; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f2f2f2; font-weight: 700; }
+        .signatures { margin-top: 60px; page-break-inside: avoid; display: flex; justify-content: space-between; }
+        .signature-box { text-align: center; width: 45%; }
+        .signature-line { border-top: 1px solid #333; margin-top: 40px; padding-top: 5px; }
+        .no-print { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        
+        @media print {
+            body { padding: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <button class="no-print" onclick="window.print()">Tlačiť</button>
+        <div class="report-header">
+            <h1>Protokol o prevzatí tovaru z výroby</h1>
+            <p>Dátum: {{ report_date }}</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Produkt</th>
+                    <th>Šarža</th>
+                    <th>Plán</th>
+                    <th>Realita</th>
+                    <th>Poznámka</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if records %}
+                    {% for record in records %}
+                    <tr>
+                        <td>{{ record.product_name }}</td>
+                        <td>{{ record.batch_id }}</td>
+                        <td>{{ record.planned }}</td>
+                        <td>{{ record.real }}</td>
+                        <td>{{ record.note or '' }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px;">Pre zadaný deň neboli nájdené žiadne prevzaté výrobky.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <div class="signatures">
+            <div class="signature-box">
+                <div class="signature-line">Odovzdal (Výroba)</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line">Prevzal (Expedícia): {{ worker_name }}</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
