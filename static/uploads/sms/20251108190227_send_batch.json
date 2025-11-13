@@ -1,0 +1,35 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "MIK: objednavka B2C-9-20251108180249 uzavreta.",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421907114726"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32953690",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50775449,
+            "phonenr": "+421907114726"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

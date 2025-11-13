@@ -1,0 +1,23 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "MIK: objednavka B2C-2025-000123 je pripravena na vyzdvihnutie.",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421907114726"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "NETWORK_ERROR",
+    "note": "<urlopen error [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond>"
+  }
+}

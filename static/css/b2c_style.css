@@ -181,4 +181,280 @@ h2, h3 {
         border-radius: 0;
     }
 }
+/* ==== LAYOUT POLISH – non-breaking, bez zmeny brandu ==== */
+:root{
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.25rem; --space-6:1.5rem;
+  --radius-6:6px; --radius-10:10px;
+  --shadow-soft:0 6px 20px rgba(0,0,0,.06);
+}
 
+/* HLAVIČKA – logo vľavo, odkazy vpravo (na mobile zostane centrovanie) */
+header{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--space-4); text-align:left; padding-bottom:20px; border-bottom:1px solid var(--border-color);
+}
+.logo{ max-width:220px; height:auto }
+.header-auth-links{ margin-top:0; }
+
+/* SEKCIÁM dáme “kartu”: rovnaké okraje, orámovanie, tieň */
+.auth-section,
+#customer-main-tabs,
+.loyalty-info{
+  background:#fff; border:1px solid var(--border-color);
+  border-radius:var(--radius-10); box-shadow:var(--shadow-soft);
+  padding:var(--space-6);
+  margin-bottom:var(--space-6);
+}
+
+/* Vernostná lišta (nahrádza inline štýl z HTML) */
+.loyalty-info{
+  display:flex; justify-content:space-between; align-items:center;
+  background-color:#fffbe6; border-color:#facc15;
+  padding:10px 15px; border-radius:8px;
+}
+.loyalty-info p{ margin:0; font-weight:700; color:#713f12; }
+.loyalty-info .button{ width:auto; padding:8px 12px; font-size:.95em; }
+
+/* TAB navigácia – medzery a “pill” pocit bez zmeny farieb */
+.tab-nav{ display:flex; flex-wrap:wrap; gap:var(--space-2); border-bottom:none; margin-bottom:var(--space-4); }
+.tab-button{
+  padding:.6rem .9rem; border:1px solid var(--border-color);
+  border-radius:10px; background:#fff; color:#6b7280; font-weight:700;
+}
+.tab-button.active{
+  color:var(--primary-color);
+  border-color:var(--primary-color);
+  box-shadow:0 0 0 3px rgba(185,28,28,.15);
+  background:#fff;
+}
+
+/* FORM – jednotné rozostupy a výrazný focus (bez zmeny farby) */
+.form-group{ margin-bottom:var(--space-4); }
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="tel"],
+.form-group input[type="password"],
+.form-group input[type="date"],
+.form-group textarea,
+.form-group select{
+  border-radius:10px;
+}
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus{
+  outline:0; border-color:var(--primary-color);
+  box-shadow:0 0 0 3px rgba(185,28,28,.12);
+}
+
+/* Tlačidlá – na väčších displejoch nie full-width (pôsobí kultivovanejšie) */
+@media (min-width: 640px){
+  .button{ width:auto; }
+}
+/* Ak niekde potrebuješ nasilu full-width, daj mu class="button btn-block" */
+.button.btn-block{ width:100% !important; }
+
+/* Súhrn objednávky – jemnejšia karta (uprace “krikľavosť”) */
+.total-summary{
+  margin-top:var(--space-4); padding:var(--space-4);
+  border:1px solid var(--border-color);
+  border-radius:var(--radius-6); background:#fafafa; text-align:center; font-size:1.05em;
+}
+.min-order-warning{
+  color:var(--primary-color); font-weight:700; margin-top:.4rem; text-align:center;
+}
+
+/* REGISTRÁCIA – dvojstĺpec na väčších šírkach, automaticky span pre “dlhé” polia */
+@media (min-width: 900px){
+  #register-tab form{
+    display:grid; grid-template-columns: 1fr 1fr; gap:20px 24px; align-items:start;
+  }
+  #register-tab h3,
+  #register-tab .form-group:has(#reg-address),
+  #register-tab .form-group:has(#reg-delivery-address),
+  #register-tab .form-group:has(#reg-dob),
+  #register-tab .form-group:has(#reg-password),
+  #register-tab .form-group:has([name="marketing_email"]),
+  #register-tab .form-group:has(#reg-terms),
+  #register-tab .form-group:has(#reg-gdpr){
+    grid-column:1 / -1; /* cez celú šírku */
+  }
+  #register-tab .button{ justify-self:start; }
+}
+
+/* LOGIN panel – na veľkých šírkach nech nie je “rozpleštený” */
+#login-tab{
+  max-width:520px;
+}
+
+/* MODAL (nahrádza inline štýl z HTML) */
+.modal-overlay{
+  position:fixed; inset:0; background-color:rgba(0,0,0,.6); z-index:1000;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px; box-sizing:border-box; opacity:0; visibility:hidden;
+  transition:opacity .25s ease, visibility .25s ease;
+}
+.modal-overlay.visible{ opacity:1; visibility:visible; }
+.modal-content{
+  background:#fff; color:var(--text-color);
+  padding:30px; border-radius:10px; width:min(680px, 92vw);
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+  max-height:80vh; overflow:auto; transform:translateY(8px);
+  transition:transform .25s ease;
+}
+.modal-overlay.visible .modal-content{ transform:none; }
+.modal-header{
+  display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid var(--border-color); padding-bottom:1rem; margin-bottom:1rem;
+}
+.modal-close{
+  font-size:28px; font-weight:700; cursor:pointer; background:none; border:none; color:#999;
+}
+
+/* ===== B2C – prehľadný cenník po prihlásení ===== */
+
+/* Hlavičky kategórií: lepšie oddelenie a "sticky" pri scrollovaní */
+#order-pricelist-container .product-category {
+  position: sticky; top: 0; z-index: 5;
+  background: #fff; padding: 10px 12px; margin: 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 700;
+}
+
+/* Položka: grid stĺpce – názov | cena | množstvo | akcie */
+#order-pricelist-container .product-item {
+  display: grid;
+  grid-template-columns: 1.6fr .8fr .9fr auto;
+  align-items: center; gap: 14px;
+  padding: 12px 6px;
+  border-bottom: 1px solid var(--secondary-color);
+}
+
+/* Bezpečné skrátenie dlhých názvov */
+#order-pricelist-container .product-item .pi-title {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+/* Cena napravo, mierne výraznejšia */
+#order-pricelist-container .product-item .pi-price {
+  justify-self: end; font-weight: 700;
+}
+
+/* Množstvo – input number uprataný */
+#order-pricelist-container .product-item .pi-qty {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+#order-pricelist-container .product-item .pi-qty input[type="number"]{
+  width: 110px; max-width: 100%;
+  padding: 10px 12px; border-radius: 10px;
+}
+
+/* Akcie – tlačidlá vedľa seba s rozostupom */
+#order-pricelist-container .product-item .pi-actions {
+  display: inline-flex; align-items: center; gap: 10px; justify-self: end;
+}
+
+/* Sekundárne "pill" tlačidlá (Info, Kusy) – čisté, s ikonou) */
+.info-btn, .by-piece-button {
+  appearance: none; background: #fff; color: var(--text-color);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px; border-radius: 999px; font-weight: 600;
+  cursor: pointer; line-height: 1;
+}
+.info-btn:hover, .by-piece-button:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, .10);
+  color: var(--primary-color);
+}
+.info-btn i, .by-piece-button i { margin-right: 6px; }
+
+/* Primárne tlačidlo (Pridať) nech je kompaktné na desktopoch */
+@media (min-width: 640px){
+  #order-pricelist-container .product-item .button { width: auto; }
+}
+
+/* Mobil: stack – názov na celý riadok, ďalší riadok 3 stĺpce */
+@media (max-width: 720px){
+  #order-pricelist-container .product-item {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "title title title"
+      "price qty actions";
+    gap: 10px;
+  }
+  #order-pricelist-container .product-item .pi-title { grid-area: title; }
+  #order-pricelist-container .product-item .pi-price { grid-area: price; justify-self: start; }
+  #order-pricelist-container .product-item .pi-qty { grid-area: qty; }
+  #order-pricelist-container .product-item .pi-actions { grid-area: actions; justify-self: end; }
+}
+
+/* Mini-popover pre Info (neprekryje modal systémy) */
+.b2c-popover {
+  position: absolute; z-index: 1001;
+  background:#fff; color: var(--text-color);
+  border:1px solid var(--border-color); border-radius: 10px;
+  box-shadow: 0 12px 35px rgba(0,0,0,.18);
+  max-width: 320px; padding: 10px 12px; font-size:.95rem;
+}
+.b2c-popover h6 { margin:0 0 6px 0; font-size:1rem; }
+.b2c-popover .muted{ color:#6b7280; font-size:.9em }
+/* Skryť šípky number inputu – cross-browser */
+#orderForm input[type=number]::-webkit-outer-spin-button,
+#orderForm input[type=number]::-webkit-inner-spin-button {
+  appearance: none;           /* štandard */
+  -webkit-appearance: none;   /* WebKit */
+  margin: 0;
+}
+
+/* Firefox – bez šípok */
+#orderForm input[type=number]{
+  appearance: textfield;      /* štandard (akceptujú aj Chromium) */
+  -moz-appearance: textfield; /* Firefox */
+}
+
+/* Pre istotu aj na riadok s množstvom v cenníku */
+#order-pricelist-container .product-item .pi-qty input[type="number"]{
+  appearance: textfield;
+  -moz-appearance: textfield;
+  -webkit-appearance: none;
+}
+/* INFO tlačidlo – sekundárne "pill" */
+.info-btn{
+  appearance: none;
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 12px; border-radius:999px;
+  background:#fff; color:var(--text-color);
+  border:1px solid var(--border-color); font-weight:600; cursor:pointer;
+}
+.info-btn:hover{
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(185,28,28,.10);
+  color: var(--primary-color);
+}
+.info-btn{
+  appearance:none;
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 12px; border-radius:999px;
+  background:#fff; color:var(--text-color);
+  border:1px solid var(--border-color); font-weight:600; cursor:pointer;
+}
+.info-btn:hover{
+  border-color:var(--primary-color);
+  box-shadow:0 0 0 3px rgba(185,28,28,.10);
+  color: var(--primary-color);
+}
+.info-btn i{ margin-right:6px; }
+
+#product-info-modal .modal-content{ max-width:720px; width:92vw; }
+#product-info-modal .meta{ color:#6b7280; font-size:.95em; margin:.25rem 0 1rem; }
+#product-info-modal .kv{ display:grid; grid-template-columns: 140px 1fr; gap:10px 16px; }
+#product-info-modal .kv div:nth-child(odd){ color:#6b7280; }
+#product-info-modal .kv div:nth-child(even){ font-weight:600; }
+.table-container table{width:100%;border-collapse:collapse}
+.table-container th,.table-container td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left}
+.table-container thead th{position:sticky;top:0;background:#f8fafc;z-index:1}
+.muted{color:#6b7280}
+.mini-btn{border:0;background:#e5e7eb;color:#111;padding:.4rem .6rem;border-radius:.5rem;cursor:pointer;font:600 12px/1 Inter}
+.mini-btn.primary{background:#2563eb;color:#fff}
+.mini-btn.danger{background:#ef4444;color:#fff}

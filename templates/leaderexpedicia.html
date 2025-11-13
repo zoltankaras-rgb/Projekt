@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vedúci expedície</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kancelaria.css') }}?v=7" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div>
+        <h1>Vedúci expedície</h1>
+        <p id="user-info">Vitajte, {{ user.get('name') if user else '' }}</p>
+      </div>
+      <a href="/logout" class="btn btn-danger"><i class="fas fa-sign-out-alt"></i> Odhlásiť</a>
+    </header>
+
+    <div class="main-layout">
+      <aside class="sidebar">
+        <ul class="sidebar-nav">
+          <li><a class="sidebar-link active" data-section="leader-dashboard"><i class="fas fa-gauge"></i> Dashboard</a></li>
+          <li><a class="sidebar-link" data-section="leader-b2c"><i class="fas fa-basket-shopping"></i> B2C Objednávky</a></li>
+          <li><a class="sidebar-link" data-section="leader-b2b"><i class="fas fa-building"></i> B2B Objednávky</a></li>
+          <li><a class="sidebar-link" data-section="leader-manual-b2b"><i class="fas fa-plus-square"></i> Manuálna B2B objednávka</a></li>
+          <li><a class="sidebar-link" data-section="leader-plan"><i class="fas fa-industry"></i> Plán výroby (7 dní)</a></li>
+          <li><a class="sidebar-link" data-section="leader-cut"><i class="fas fa-cut"></i> Krájačky/Výroba</a></li>
+        </ul>
+      </aside>
+
+      <main class="main-content">
+        <!-- Dashboard -->
+        <div id="leader-dashboard" class="content-section active">
+          <h3>Prehľad dňa</h3>
+          <div class="card">
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <label>Dátum: <input id="ldr-date" type="date"></label>
+              <button id="ldr-refresh" class="btn btn-primary">Obnoviť</button>
+            </div>
+          </div>
+
+          <!-- KPI -->
+          <div class="grid-kpi" style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;margin-top:12px">
+            <div class="card"><div class="card-body"><div class="muted">B2C objednávky</div><div id="kpi-b2c" style="font-weight:800;font-size:1.4rem">—</div></div></div>
+            <div class="card"><div class="card-body"><div class="muted">B2B objednávky</div><div id="kpi-b2b" style="font-weight:800;font-size:1.4rem">—</div></div></div>
+            <div class="card"><div class="card-body"><div class="muted">Počet položiek</div><div id="kpi-items" style="font-weight:800;font-size:1.4rem">—</div></div></div>
+            <div class="card"><div class="card-body"><div class="muted">Suma spolu</div><div id="kpi-sum" style="font-weight:800;font-size:1.4rem">—</div></div></div>
+          </div>
+
+          <!-- 7 dní: B2C/B2B/Spolu -->
+          <div id="leader-next7"></div>
+
+          <!-- Akcie na supermarkety -->
+          <div id="leader-promos"></div>
+
+          <!-- Expedičný tovar pod minimom -->
+          <div id="leader-lowstock-goods"></div>
+
+          <!-- 7-dňový prehľad výrobkov -->
+          <div id="leader-forecast"></div>
+
+          <!-- Plán výroby (preview) -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-header"><strong>Plán výroby – 7 pracovných dní (preview)</strong></div>
+            <div class="card-body" id="plan-preview"></div>
+            <div class="card-footer"><button id="plan-commit" class="btn btn-secondary">Zapísať plán (vyroba)</button></div>
+          </div>
+        </div>
+
+        <!-- B2C -->
+        <div id="leader-b2c" class="content-section">
+          <h3>B2C objednávky (deň)</h3>
+          <div class="card">
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <label>Dátum: <input id="b2c-date" type="date"></label>
+              <button id="b2c-refresh" class="btn btn-primary">Obnoviť</button>
+              <span style="flex:1"></span>
+              <button id="b2c-export" class="btn btn-secondary">Export CSV</button>
+              <button id="b2c-pick"   class="btn btn-secondary">Picklist CSV</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-body">
+              <div class="table-container">
+                <table id="tbl-b2c"><thead>
+                  <tr><th>#</th><th>Zákazník</th><th>Dodanie</th><th>Predb./Finálna</th><th>Stav</th><th>Akcia</th></tr>
+                </thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- B2B -->
+        <div id="leader-b2b" class="content-section">
+          <h3>B2B objednávky (deň)</h3>
+          <div class="card">
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <label>Dátum: <input id="b2b-date" type="date"></label>
+              <button id="b2b-refresh" class="btn btn-primary">Obnoviť</button>
+              <span style="flex:1"></span>
+              <button id="b2b-export" class="btn btn-secondary">Export CSV</button>
+              <button id="b2b-pick"   class="btn btn-secondary">Picklist CSV</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-body">
+              <div class="table-container">
+                <table id="tbl-b2b"><thead>
+                  <tr><th>#</th><th>Odberateľ</th><th>Dodanie</th><th>Predb./Finálna</th><th>Stav</th><th>Akcia</th></tr>
+                </thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manuálne zadanie B2B -->
+        <div id="leader-manual-b2b" class="content-section">
+          <h3>Manuálna B2B objednávka</h3>
+          <div id="manual-b2b-form" class="card">
+            <div class="card-body">
+              <div class="form-grid">
+                <div class="form-group"><label>Odberateľ</label><input id="nb2b-name"></div>
+                <div class="form-group"><label>Termín dodania</label><input id="nb2b-date" type="date"></div>
+                <div class="form-group" style="grid-column:1 / -1"><label>Poznámka</label><input id="nb2b-note"></div>
+              </div>
+              <h4>Položky</h4>
+              <table id="nb2b-items" style="width:100%"><thead>
+                <tr><th>EAN</th><th>Názov</th><th>Množstvo</th><th>MJ</th><th>Cena bez DPH</th><th></th></tr>
+              </thead><tbody></tbody></table>
+              <button id="nb2b-add" class="btn btn-secondary" style="margin-top:8px">+ položka</button>
+            </div>
+            <div class="card-footer">
+              <button id="nb2b-save" class="btn btn-primary">Uložiť objednávku</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Krájačky/Výroba -->
+        <div id="leader-cut" class="content-section">
+          <h3>Krajanie / Výroba</h3>
+          <div class="card">
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <label>Dátum: <input id="cut-date" type="date"></label>
+              <button id="cut-refresh" class="btn btn-primary">Obnoviť</button>
+              <span style="flex:1"></span>
+              <button id="cut-new" class="btn btn-secondary">+ Nová úloha</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-body">
+              <div class="table-container">
+                <table id="tbl-cut"><thead>
+                  <tr><th>#</th><th>Objednávka</th><th>EAN</th><th>Názov</th><th>Množstvo</th><th>MJ</th><th>Termín</th><th>Stav</th><th>Akcia</th></tr>
+                </thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/leaderexpediction.js') }}?v=1"></script>
+</body>
+</html>

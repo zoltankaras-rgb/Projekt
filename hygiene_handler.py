@@ -77,53 +77,188 @@ def save_hygiene_task(data):
         db_connector.execute_query(query, params, fetch='none')
         return {"message": "Nová úloha bola vytvorená."}
 
+from datetime import datetime, timedelta
+import db_connector
+
+def _combine_date_time(date_str: str, time_str: str | None) -> datetime:
+    """Poskladá datetime z 'YYYY-MM-DD' a 'HH:MM' (alebo 'HH:MM:SS'); fallback = teraz."""
+    try:
+        base = datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        base = datetime.now()
+    if not time_str:
+        # ak neprišlo, začiatok je teraz (zmysluplnejšie pre reálnu prevádzku)
+        return datetime.now()
+    time_str = time_str.strip()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            t = datetime.strptime(time_str, fmt).time()
+            return datetime.combine(base.date(), t)
+        except Exception:
+            continue
+    # fallback
+    return datetime.now()
+
 def log_hygiene_completion(data):
-    """Zapíše detailný záznam o splnení úlohy, teraz už aj s menom vykonávajúceho."""
-    task_id, completion_date, user_info, performer_name = data.get('task_id'), data.get('completion_date'), data.get('user'), data.get('performer_name')
-    if not all([task_id, completion_date, user_info, performer_name]): return {"error": "Chýbajú povinné údaje."}
-    if db_connector.execute_query("SELECT id FROM hygiene_log WHERE task_id = %s AND completion_date = %s", (task_id, completion_date), fetch='one'):
+    """
+    Zapíše splnenie úlohy.
+    Nové: prijíma 'start_time' (HH:MM), automaticky vypočíta:
+      - exposure_end_at = start + 15 min
+      - rinse_end_at    = exposure_end_at + 10 min
+      - finished_at     = rinse_end_at
+    Zmäkčené: 'user' v requeste nie je povinný (ID môže byť NULL), stačí performer_name.
+    """
+    task_id = data.get('task_id')
+    completion_date = data.get('completion_date')  # 'YYYY-MM-DD'
+    performer_name = (data.get('performer_name') or '').strip()
+    user_info = data.get('user') or {}  # nemusí byť prítomné
+    if not all([task_id, completion_date, performer_name]):
+        return {"error": "Chýbajú povinné údaje."}
+
+    # unikát: 1 záznam na task_id + deň (ponechávam podľa tvojej logiky)
+    if db_connector.execute_query(
+        "SELECT id FROM hygiene_log WHERE task_id = %s AND completion_date = %s",
+        (task_id, completion_date), fetch='one'
+    ):
         return {"message": "Úloha už bola pre daný deň zapísaná."}
-    params = (task_id, completion_date, user_info.get('id'), performer_name, data.get('agent_id') or None, data.get('concentration'), data.get('exposure_time'), data.get('notes', ''))
-    insert_query = "INSERT INTO hygiene_log (task_id, completion_date, user_id, user_fullname, agent_id, concentration, exposure_time, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+
+    # výpočet časov
+    start_dt = _combine_date_time(completion_date, data.get('start_time'))
+    exposure_end_dt = start_dt + timedelta(minutes=15)
+    rinse_end_dt = exposure_end_dt + timedelta(minutes=10)
+    finished_dt = rinse_end_dt
+
+    params = (
+        task_id,
+        completion_date,
+        user_info.get('id') if isinstance(user_info, dict) else None,
+        performer_name,
+        data.get('agent_id') or None,
+        data.get('concentration'),
+        data.get('exposure_time'),
+        data.get('notes', ''),
+        start_dt,
+        exposure_end_dt,
+        rinse_end_dt,
+        finished_dt,
+    )
+
+    insert_query = """
+        INSERT INTO hygiene_log (
+            task_id, completion_date, user_id, user_fullname, agent_id, concentration, exposure_time, notes,
+            start_at, exposure_end_at, rinse_end_at, finished_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
     db_connector.execute_query(insert_query, params, fetch='none')
     return {"message": "Úloha bola zaznamenaná ako splnená."}
 
-def check_hygiene_log(data):
-    """Zaznamená kontrolu vykonanej úlohy."""
-    log_id, user_info = data.get('log_id'), data.get('user')
-    if not all([log_id, user_info]): return {"error": "Chýbajú povinné údaje."}
-    params = (user_info.get('full_name'), datetime.now(), log_id)
-    db_connector.execute_query("UPDATE hygiene_log SET checked_by_fullname = %s, checked_at = %s WHERE id = %s", params, 'none')
-    return {"message": "Úloha skontrolovaná."}
 
-def get_hygiene_report_data(report_date_str, period='denne'):
-    """Pripraví dáta pre tlačový report pre RVPS pre rôzne obdobia."""
-    if not report_date_str: return None
+
+
+def check_hygiene_log(data):
+    """
+    Označí záznam hygieny ako skontrolovaný.
+    Očakáva: {"log_id": <int>, "checker_name": <str optional>}
+    Ak checker_name nie je, skús user.fullname, inak použijeme "Kontrolór".
+    """
+    if not data or not data.get('log_id'):
+        return {"error": "Chýba log_id."}, 400
+
+    log_id = int(data['log_id'])
+    checker = (data.get('checker_name') or '').strip()
+    if not checker:
+        user = data.get('user') or {}
+        checker = (user.get('fullname') or '').strip() or "Kontrolór"
+
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    db_connector.execute_query(
+        "UPDATE hygiene_log SET checked_by_fullname=%s, checked_at=%s WHERE id=%s",
+        (checker, now, log_id),
+        fetch='none'
+    )
+    return {"message": "Kontrola potvrdená.", "checked_by_fullname": checker}
+
+
+
+def get_hygiene_report_data(date_str: str, period: str = 'denne'):
+    """
+    Vráti dáta pre report aj s časmi: start_at, exposure_end_at, rinse_end_at, finished_at.
+    """
+    if not date_str:
+        return None
     try:
-        base_date = datetime.strptime(report_date_str, '%Y-%m-%d').date()
-    except ValueError:
+        base = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except Exception:
         return None
 
-    if period == 'tyzdenne':
-        start_date = base_date - timedelta(days=base_date.weekday())
-        end_date = start_date + timedelta(days=4)
-        title = f"Týždenný Záznam o Vykonaní Sanitácie ({start_date.strftime('%d.%m.')} - {end_date.strftime('%d.%m.%Y')})"
-    elif period == 'mesacne':
-        start_date = base_date.replace(day=1)
-        end_date = (start_date + timedelta(days=31)).replace(day=1) - timedelta(days=1)
-        title = f"Mesačný Záznam o Vykonaní Sanitácie ({start_date.strftime('%m/%Y')})"
+    if period == 'denne':
+        start, end = base, base
+        title = f"Denný záznam o vykonaní sanitácie ({base.strftime('%d.%m.%Y')})"
+        period_str = base.strftime("%d.%m.%Y")
+    elif period == 'tyzdenne':
+        start = base - timedelta(days=base.weekday())
+        end = start + timedelta(days=6)
+        title = f"Týždenný záznam o vykonaní sanitácie ({start.strftime('%d.%m.%Y')} – {end.strftime('%d.%m.%Y')})"
+        period_str = f"{start.strftime('%d.%m.%Y')} – {end.strftime('%d.%m.%Y')}"
     else:
-        start_date = end_date = base_date
-        title = f"Denný Záznam o Vykonaní Sanitácie ({start_date.strftime('%d.%m.%Y')})"
-        
-    query = """
-        SELECT ht.task_name, ht.location, hl.user_fullname, hl.completion_date, ha.agent_name,
-               hl.concentration, hl.exposure_time, hl.checked_by_fullname, hl.checked_at
-        FROM hygiene_log hl JOIN hygiene_tasks ht ON hl.task_id = ht.id LEFT JOIN hygiene_agents ha ON hl.agent_id = ha.id
-        WHERE hl.completion_date BETWEEN %s AND %s ORDER BY hl.completion_date, ht.location, ht.task_name
-    """
-    records = db_connector.execute_query(query, (start_date, end_date))
-    
-    # OPRAVA: Namiesto zoskupovania tu, posielame priamo zoznam záznamov
-    return {"records": records, "title": title, "period_str": f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"}
+        start = date(base.year, base.month, 1)
+        if base.month == 12:
+            end = date(base.year, 12, 31)
+        else:
+            from calendar import monthrange
+            end = date(base.year, base.month, monthrange(base.year, base.month)[1])
+        title = f"Mesačný záznam o vykonaní sanitácie ({start.strftime('%m/%Y')})"
+        period_str = f"{start.strftime('%m/%Y')}"
 
+    q = """
+        SELECT 
+            l.completion_date,
+            t.location,
+            t.task_name,
+            l.user_fullname,
+            a.agent_name,
+            l.concentration,
+            l.exposure_time,
+            l.start_at,
+            l.exposure_end_at,
+            l.rinse_end_at,
+            l.finished_at,
+            l.checked_by_fullname
+        FROM hygiene_log l
+        JOIN hygiene_tasks t ON t.id = l.task_id
+        LEFT JOIN hygiene_agents a ON a.id = l.agent_id
+        WHERE l.completion_date >= %s AND l.completion_date <= %s
+        ORDER BY l.completion_date, t.location, t.task_name
+    """
+    rows = db_connector.execute_query(q, (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))) or []
+
+    # transformácia (formátovanie časov na HH:MM)
+    recs = []
+    for r in rows:
+        def fmt(dt):
+            if not dt: return ''
+            s = str(dt)
+            # dt môže byť datetime/dátumový string; ber len čas HH:MM
+            try:
+                if len(s) >= 16:
+                    return s[11:16]
+                return s
+            except Exception:
+                return ''
+        recs.append({
+            "completion_date": r.get("completion_date"),
+            "location": r.get("location"),
+            "task_name": r.get("task_name"),
+            "user_fullname": r.get("user_fullname"),
+            "agent_name": r.get("agent_name"),
+            "concentration": r.get("concentration"),
+            "exposure_time": r.get("exposure_time"),
+            "start_at": fmt(r.get("start_at")),
+            "exposure_end_at": fmt(r.get("exposure_end_at")),
+            "rinse_end_at": fmt(r.get("rinse_end_at")),
+            "finished_at": fmt(r.get("finished_at")),
+            "checked_by_fullname": r.get("checked_by_fullname"),
+        })
+
+    return {"title": title, "period_str": period_str, "records": recs}

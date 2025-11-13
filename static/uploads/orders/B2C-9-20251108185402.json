@@ -1,0 +1,40 @@
+{
+  "order_number": "B2C-9-20251108185402",
+  "deliveryDate": "2025-11-09",
+  "note": "asdasd",
+  "customerName": "Zoltán Káras",
+  "customerLoginId": "720381973773",
+  "customerAddress": "Hollého č.1999/13",
+  "customerEmail": "miksro@slovanet.sk",
+  "items": [
+    {
+      "ean": "21101",
+      "name": "Hoväzdie zadné",
+      "quantity": 9.5,
+      "unit": "kg",
+      "item_note": "",
+      "price_bez_dph": 9.5,
+      "price_s_dph": 9.975,
+      "dph_percent": 5.0,
+      "nazov": "Hoväzdie zadné",
+      "mnozstvo": 9.5,
+      "mj": "kg",
+      "cena_bez_dph": 9.5,
+      "cena_s_dph": 9.975,
+      "dph": 5.0,
+      "line_total_bez_dph": 90.25,
+      "line_total_s_dph": 94.76
+    }
+  ],
+  "totalNet": 90.25,
+  "totalVat": 4.51,
+  "totalGross": 94.76,
+  "total_vat": 4.51,
+  "suma_bez_dph": 90.25,
+  "suma_s_dph": 94.76,
+  "dph": 4.51,
+  "order_date": "08.11.2025",
+  "uplatnena_odmena_poznamka": "Klobásky",
+  "delivery_window": "workdays_08_12",
+  "deliveryWindowPretty": "Po–Pia 08:00–12:00"
+}

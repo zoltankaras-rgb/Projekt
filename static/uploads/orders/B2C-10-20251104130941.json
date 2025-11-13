@@ -1,0 +1,36 @@
+{
+  "order_number": "B2C-10-20251104130941",
+  "deliveryDate": "2025-11-06",
+  "note": "asdasdasdasd",
+  "customerName": "Zoltán Káras 1990",
+  "customerLoginId": "326157468361",
+  "customerAddress": "Hollého č.1999/13",
+  "customerEmail": "zoltankaras@miksro.sk",
+  "items": [
+    {
+      "ean": "21101",
+      "name": "Hoväzdie zadné",
+      "quantity": 15,
+      "unit": "kg",
+      "item_note": "",
+      "price_bez_dph": 9.5,
+      "price_s_dph": 9.975,
+      "dph_percent": 5.0
+    },
+    {
+      "ean": "1000000001001",
+      "name": "Šunková saláma krájaná 500g",
+      "quantity": 4.5,
+      "unit": "kg",
+      "item_note": "",
+      "price_bez_dph": 3.2,
+      "price_s_dph": 3.5200000000000005,
+      "dph_percent": 10.0
+    }
+  ],
+  "totalNet": 156.9,
+  "totalVat": 8.564999999999998,
+  "totalGross": 165.465,
+  "order_date": "04.11.2025",
+  "uplatnena_odmena_poznamka": null
+}

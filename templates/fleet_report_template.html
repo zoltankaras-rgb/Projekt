@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Mesačný Report Vozidla</title>
+    {% set report_type = report_type or 'all' %}
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
         /* Základné štýly pre zobrazenie na obrazovke */
@@ -57,6 +58,8 @@
             <p><strong>Typ:</strong> {{ vehicle.type or 'N/A' }}</p>
             <p><strong>Šofér:</strong> {{ vehicle.default_driver or 'N/A' }}</p>
         </div>
+{% if report_type in ['all','logs'] %}
+
 
         <h2>Kniha jázd</h2>
         <table>
@@ -66,7 +69,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for log in logs %}
+                {% for log in logs if (log.goods_out_kg and (log.goods_out_kg|float) > 0) and (log.delivery_notes_count and (log.delivery_notes_count|int) > 0) %}
                 <tr>
                     <td>{{ log.log_date.strftime('%d.%m.%Y') }}</td>
                     <td>{{ log.driver or '' }}</td>
@@ -89,6 +92,10 @@
                 </tr>
             </tbody>
         </table>
+{% endif %}
+{% if report_type in ['all','consumption'] %}
+
+
 
         <h2>Tankovanie</h2>
         <table>
@@ -115,10 +122,16 @@
                 {% endfor %}
             </tbody>
         </table>
+{% endif %}
+{% if report_type in ['all','costs'] %}
+
+
 
         <h2>Súhrn a Prehľad Nákladov</h2>
         <div class="info-grid">
             <div>
+{% endif %}\n{% if report_type in ['all','costs'] %}\n
+
                 <h2>Prehľad</h2>
                 <table class="summary-table">
                     <tr><td>Celkové náklady za mesiac:</td><td>{{ "%.2f"|format(analysis.total_costs) }} €</td></tr>
@@ -127,7 +140,7 @@
                     <tr><td>Náklady na 1 kg tovaru (+10% amort.):</td><td>{{ "%.2f"|format(analysis.cost_per_kg_goods) }} €</td></tr>
                 </table>
             </div>
-            <div>
+            <div>\n{% endif %}\n\n{% if report_type in ['all','costs'] %}\n
                 <h2>Fixné náklady</h2>
                 <table class="summary-table">
                     {% for cost in fixed_costs %}
@@ -151,3 +164,4 @@
 </body>
 </html>
 
+\n{% endif %}\n

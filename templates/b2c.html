@@ -8,47 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/b2c_style.css') }}">
-    <style>
-        .loyalty-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: #fffbe6;
-            border: 1px solid #facc15;
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .loyalty-info p { margin: 0; font-weight: bold; color: #713f12; }
-        .loyalty-info button { margin: 0; width: auto; padding: 8px 12px; font-size: 0.9em; }
-        
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s; }
-        .modal-overlay.visible { opacity: 1; visibility: visible; }
-        .modal-content { background-color: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; max-height: 80vh; overflow-y: auto; transform: scale(0.9); transition: transform 0.3s; }
-        .modal-overlay.visible .modal-content { transform: scale(1); }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1rem; }
-        .modal-header h4 { margin: 0; font-size: 1.25rem; }
-        .modal-close { font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; background: none; border: none; }
-
-        .min-order-warning {
-            color: var(--primary-color);
-            font-weight: bold;
-            text-align: center;
-            margin-top: 10px;
-        }
-        
-        /* Štýl pre tlačidlo na poznámku a checkbox */
-        .by-piece-button {
-            background: none;
-            border: 1px solid var(--primary-color);
-            color: var(--primary-color);
-            padding: 4px 8px;
-            font-size: 0.8em;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-    </style>
+  
 </head>
 <body>
     <div class="container">
@@ -58,44 +18,104 @@
         </header>
 
         <div id="loggedOutView">
+            <!-- Verejná ponuka pred prihlásením (zostáva) -->
             <div id="public-pricelist-container"></div>
+
             <div id="auth-section" class="auth-section">
                  <div class="tab-nav">
                     <button class="tab-button active" data-tab="login">Prihlásenie</button>
                     <button class="tab-button" data-tab="register">Nová registrácia</button>
                 </div>
+
                 <div id="login-tab" class="tab-content active">
                     <h3>Prihlásenie</h3>
-                    <form id="loginForm">
-                        <div class="form-group"><label for="login-email">E-mail</label><input type="email" name="email" id="login-email" required></div>
-                        <div class="form-group"><label for="login-password">Heslo</label><input type="password" name="password" id="login-password" required></div>
+                    <form id="loginForm" autocomplete="on">
+                        <div class="form-group">
+                            <label for="login-email">E-mail</label>
+                            <input type="email" name="email" id="login-email" required autocomplete="username">
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Heslo</label>
+                            <input type="password" name="password" id="login-password" required autocomplete="current-password">
+                        </div>
                         <button type="submit" class="button">Prihlásiť sa</button>
                     </form>
                 </div>
+
                 <div id="register-tab" class="tab-content">
                     <h3>Registrácia</h3>
-                    <form id="registerForm">
-                        <div class="form-group"><label for="reg-name">Meno a Priezvisko</label><input type="text" id="reg-name" name="name" required></div>
-                        <div class="form-group"><label for="reg-email">E-mail</label><input type="email" id="reg-email" name="email" required></div>
-                        <div class="form-group"><label for="reg-phone">Telefón</label><input type="tel" id="reg-phone" name="phone" required></div>
-                        <div class="form-group"><label for="reg-address">Fakturačná adresa</label><input type="text" id="reg-address" name="address" required></div>
+                    <form id="registerForm" autocomplete="on">
+                        <div class="form-group">
+                            <label for="reg-name">Meno a Priezvisko</label>
+                            <input type="text" id="reg-name" name="name" required autocomplete="name">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-email">E-mail</label>
+                            <input type="email" id="reg-email" name="email" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-phone">Telefón</label>
+                            <input type="tel" id="reg-phone" name="phone" required autocomplete="tel">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-address">Fakturačná adresa</label>
+                            <input type="text" id="reg-address" name="address" required autocomplete="street-address">
+                        </div>
+
                         <div class="form-group">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="same-address-checkbox" checked>
                                 Doručovacia adresa je rovnaká ako fakturačná
                             </label>
                         </div>
+
                         <div id="delivery-address-group" class="form-group hidden">
                             <label for="reg-delivery-address">Adresa doručenia</label>
-                            <input type="text" id="reg-delivery-address" name="delivery_address">
+                            <input type="text" id="reg-delivery-address" name="delivery_address" autocomplete="street-address">
                         </div>
-                        <div class="form-group"><label for="reg-password">Heslo (min. 6 znakov)</label><input type="password" id="reg-password" name="password" required></div>
+
                         <div class="form-group">
-                             <label class="checkbox-label">
-                                <input type="checkbox" id="reg-gdpr" name="gdpr" required>
-                                Súhlasím so spracovaním osobných údajov.
+                            <label for="reg-password">Heslo (min. 6 znakov)</label>
+                            <input type="password" id="reg-password" name="password" required autocomplete="new-password">
+                        </div>
+
+                        <!-- Dátum narodenia (voliteľné) -->
+                        <div class="form-group">
+                            <label for="reg-dob">Dátum narodenia (narodeninový bonus)</label>
+                            <input type="date" id="reg-dob" name="dob" autocomplete="bday">
+                        </div>
+
+                        <!-- GDPR – 2 samostatné povinné checkboxy (otvárajú pop-up) -->
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="reg-terms" name="gdpr_terms" required>
+                                Súhlasím s <a href="#" onclick="openModal('terms-modal'); return false;">Obchodnými podmienkami</a>.
                             </label>
                         </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="reg-gdpr" name="gdpr_privacy" required>
+                                Beriem na vedomie <a href="#" onclick="openModal('privacy-modal'); return false;">Ochranu osobných údajov</a>.
+                            </label>
+                        </div>
+
+                        <!-- Marketingové súhlasy (dobrovoľné, nepredzaškrtnuté) -->
+                        <div class="form-group">
+                            <strong>Marketingové súhlasy (dobrovoľné):</strong><br>
+                            <label class="checkbox-label"><input type="checkbox" name="marketing_email"> E-mail ponuky</label><br>
+                            <label class="checkbox-label"><input type="checkbox" name="marketing_sms"> SMS ponuky</label><br>
+                            <label class="checkbox-label"><input type="checkbox" name="marketing_newsletter"> Newsletter</label><br>
+                            <label class="checkbox-label"><input type="checkbox" name="birthday_bonus_opt_in" checked> Narodeninový bonus</label>
+                        </div>
+
+                        <!-- Anti-bot (honeypot + timestamp + jednoduchá captcha) -->
+                        <input type="text" name="hp_url" style="display:none" tabindex="-1" autocomplete="off">
+                        <input type="hidden" name="form_ts" value="">
+                        <div class="form-group">
+                            <label id="captcha-question">Overujem…</label>
+                            <input type="number" name="captcha_answer" inputmode="numeric" required style="max-width: 120px;" autocomplete="off">
+                        </div>
+
                         <button type="submit" class="button">Zaregistrovať sa</button>
                     </form>
                 </div>
@@ -167,8 +187,315 @@
             <button id="save-item-note-btn" class="button">Potvrdiť</button>
         </div>
     </div>
-    
+
+    <!-- MODAL: Všeobecné obchodné podmienky -->
+    <div id="terms-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4>Všeobecné obchodné podmienky (B2C)</h4>
+          <button class="modal-close" onclick="closeModal('terms-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p><strong>Prevádzkovateľ e-shopu:</strong> MIK, s.r.o., Hollého č.1999/13, 927&nbsp;05&nbsp;Šaľa, IČO: 34099514, DIČ: 2020374125, IČ DPH: SK2020374125 (podľa §4, registrácia od 26.9.1994), e-mail: <a href="mailto:info@miksro.sk">info@miksro.sk</a>.</p>
+          <p>Účinnosť od: 3. 11. 2025</p>
+
+          <h5>1. Vymedzenie pojmov</h5>
+          <ul>
+            <li><strong>Predávajúci</strong> – MIK, s.r.o. (prevádzkovateľ e-shopu).</li>
+            <li><strong>Spotrebiteľ</strong> – fyzická osoba nakupujúca mimo rámca podnikania.</li>
+            <li><strong>Tovar</strong> – najmä čerstvé a mrazené mäso, údeniny a mäsové výrobky.</li>
+          </ul>
+
+          <h5>2. Informácie o tovare a alergény</h5>
+          <ul>
+            <li>Vyobrazenia slúžia na ilustráciu; rozhoduje popis a parametre pri produkte.</li>
+            <li>Alergény a zloženie sú uvedené pri produkte alebo na obale.</li>
+          </ul>
+
+          <h5>3. Hmotnostná tolerancia pri váženom tovare</h5>
+          <ul>
+            <li>Položky predávané <em>na váhu</em> môžu mať odchýlku (bežne ±10&nbsp;%).</li>
+            <li>Účtuje sa <strong>skutočná hmotnosť</strong> pri expedícii; výsledná suma sa môže mierne líšiť.</li>
+          </ul>
+
+          <h5>4. Cena a platba</h5>
+          <ul>
+            <li>Ceny sú s DPH, ak nie je uvedené inak.</li>
+            <li><strong>Upozornenie:</strong> Z technických príčin je <strong>zatiaľ platba možná len v hotovosti</strong> pri prevzatí tovaru.</li>
+          </ul>
+
+          <h5>5. Objednávka a uzavretie zmluvy</h5>
+          <ul>
+            <li>Zmluva je uzavretá potvrdením objednávky predávajúcim (automatický e-mail).</li>
+            <li>Predávajúci môže odmietnuť zjavne chybnú objednávku (napr. omylná cena 0,01&nbsp;€).</li>
+            <li>Minimálna hodnota objednávky je <strong>20,00 € s DPH</strong>, ak nie je uvedené inak.</li>
+          </ul>
+
+          <h5>6. Dodanie a prebratie</h5>
+          <ul>
+            <li>Doručenie vlastnou dopravou/kuriérom s dodržaním <strong>chladiaceho reťazca</strong>.</li>
+            <li>Po prevzatí je zákazník povinný bezodkladne uskladniť tovar pri odporúčanej teplote (zvyčajne 0–4&nbsp;°C) a dodržať dobu spotreby.</li>
+            <li><strong>Platba prebieha pri prevzatí v hotovosti.</strong></li>
+          </ul>
+
+          <h5>7. Odstúpenie od zmluvy a reklamácie</h5>
+          <ul>
+            <li>Pri tovare, ktorý <strong>rýchlo podlieha skaze</strong> (čerstvé mäso, mnohé mäsové výrobky), sa právo odstúpiť do 14 dní <strong>neuplatňuje</strong>.</li>
+            <li>Pri zjavnej vade (balenie, teplota, zápach) kontaktujte nás <strong>bezodkladne, najneskôr do 24 hodín</strong> od prevzatia na <a href="mailto:info@miksro.sk">info@miksro.sk</a> a priložte foto/dokumentáciu.</li>
+          </ul>
+
+          <h5>8. Vernostné programy a bonusy</h5>
+          <ul>
+            <li>Pravidlá vernostných bodov a narodeninového bonusu zverejňujeme v účte zákazníka.</li>
+          </ul>
+
+          <h5>9. Záverečné ustanovenia</h5>
+          <ul>
+            <li>Právne vzťahy sa riadia právom SR. Podmienky môžeme meniť; aktuálna verzia je v e-shope.</li>
+          </ul>
+
+          <p style="font-size:.9em;color:#666">Poznámka: Vzorový text – pred zverejnením si ho nechajte skontrolovať právnikom.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Ochrana osobných údajov (GDPR) -->
+    <div id="privacy-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4>Ochrana osobných údajov (GDPR)</h4>
+          <button class="modal-close" onclick="closeModal('privacy-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p><strong>Prevádzkovateľ:</strong> MIK, s.r.o., Hollého č.1999/13, 927&nbsp;05&nbsp;Šaľa, IČO: 34099514, DIČ: 2020374125, IČ DPH: SK2020374125 (podľa §4, registrácia od 26.9.1994), e-mail: <a href="mailto:info@miksro.sk">info@miksro.sk</a>.</p>
+          <p>Účinnosť od: 3. 11. 2025</p>
+
+          <h5>Aké údaje spracúvame</h5>
+          <ul>
+            <li>Identifikačné a kontaktné údaje: meno, e-mail, telefón, adresy.</li>
+            <li>Údaje o objednávkach a platbách; <strong>aktuálne prebieha platba len v hotovosti pri prevzatí</strong>.</li>
+            <li>Dobrovoľné: dátum narodenia (na „narodeninový bonus“), marketingové súhlasy.</li>
+            <li>Technické záznamy: IP a čas potvrdení (bezpečnosť, audit súhlasov).</li>
+          </ul>
+
+          <h5>Účely a právne základy</h5>
+          <ul>
+            <li><strong>Plnenie zmluvy</strong> – spracovanie objednávky a doručenie (čl. 6(1)(b)).</li>
+            <li><strong>Právne povinnosti</strong> – účtovníctvo, dane, archivácia (čl. 6(1)(c)).</li>
+            <li><strong>Oprávnený záujem</strong> – bezpečnosť, prevencia podvodov (čl. 6(1)(f)).</li>
+            <li><strong>Súhlas</strong> – marketing (e-mail/SMS/newsletter) a narodeninový bonus (čl. 6(1)(a)); súhlas možno kedykoľvek odvolať.</li>
+          </ul>
+
+          <h5>Doba uchovávania</h5>
+          <ul>
+            <li>Objednávky a účtovné doklady: podľa zákona (spravidla 10 rokov).</li>
+            <li>Účet/objednávky: po dobu trvania účtu + max. 2 roky od poslednej aktivity (ak zákon nevyžaduje dlhšie).</li>
+            <li>Marketing: do odvolania súhlasu alebo do namietnutia.</li>
+          </ul>
+
+          <h5>Príjemcovia</h5>
+          <ul>
+            <li>Hosting/IT, kuriérske služby, e-mail/SMS brány – len v nevyhnutnom rozsahu.</li>
+            <li>Prenos mimo EÚ/EEA nevykonávame; ak by bol potrebný, použijeme primerané záruky.</li>
+          </ul>
+
+          <h5>Vaše práva</h5>
+          <ul>
+            <li>Prístup, oprava, vymazanie, obmedzenie, prenos, námietka; odvolanie súhlasu bez vplyvu na zákonnosť spracúvania pred odvolaním.</li>
+            <li>Dozor: Úrad na ochranu osobných údajov SR.</li>
+            <li>Kontakt na uplatnenie práv: <a href="mailto:info@miksro.sk">info@miksro.sk</a>.</li>
+          </ul>
+
+          <h5>Cookies</h5>
+          <ul>
+            <li>Nevyhnutné cookies pre košík a prihlásenie používame vždy.</li>
+            <li>Analytické/marketingové cookies len so súhlasom.</li>
+          </ul>
+
+          <p style="font-size:.9em;color:#666">Poznámka: Vzorový text – pred zverejnením doplňte/nastavte partnerov a interné procesy.</p>
+        </div>
+      </div>
+    </div>
+    <!-- /NOVÉ MODALY -->
+
     <script src="{{ url_for('static', filename='js/b2c.js') }}"></script>
+<script>
+(function(){
+  function enhancePricelist(scope){
+    var root = scope || document;
+    // pre každú položku nájdeme rozumné časti a priradíme triedy
+    root.querySelectorAll('#order-pricelist-container .product-item').forEach(function(row){
+      // názov
+      var title = row.querySelector('.pi-title, .product-name, .name, h5, h4, .title');
+      if (title) title.classList.add('pi-title');
+
+      // cena
+      var price = row.querySelector('.pi-price, [data-price], .price, .cena');
+      if (price) price.classList.add('pi-price');
+
+      // množstvo (input number)
+      var qtyWrap = row.querySelector('.pi-qty') || row.querySelector('.qty, .quantity, .mnozstvo');
+      var qtyInput = row.querySelector('input[type="number"]');
+      if (!qtyWrap && qtyInput){
+        qtyWrap = document.createElement('div');
+        qtyWrap.className = 'pi-qty';
+        qtyInput.parentNode.insertBefore(qtyWrap, qtyInput);
+        qtyWrap.appendChild(qtyInput);
+      } else if (qtyWrap) {
+        qtyWrap.classList.add('pi-qty');
+      }
+
+      // akcie – drž spolu tlačidlá
+      var actions = row.querySelector('.pi-actions') || row.querySelector('.actions');
+      if (!actions){
+        // fallback: ak je v riadku primárne .button, zoskupíme okolo neho
+        var primary = row.querySelector('.button');
+        if (primary){
+          actions = document.createElement('div');
+          actions.className = 'pi-actions';
+          primary.parentNode.insertBefore(actions, primary);
+          actions.appendChild(primary);
+        }
+      } else {
+        actions.classList.add('pi-actions');
+      }
+
+      // INFO a "na kusy" tlačidlá – pekné pill
+      // označ "Info" podľa textu / data-action / aria-label
+      row.querySelectorAll('button, a').forEach(function(el){
+        var txt = (el.textContent || '').trim().toLowerCase();
+        var isInfo = el.matches('.info-btn, [data-action="info"]') || /info|detail/i.test(el.getAttribute('aria-label') || '') || txt === 'info' || /info|detail/i.test(txt);
+        if (isInfo) el.classList.add('info-btn');
+
+        // už existujúci "kusy" prepni na pill
+        if (el.classList.contains('by-piece-button')) {
+          el.innerHTML = '<i class="fa fa-grip-lines"></i> Kusy';
+        }
+        if (isInfo && !el.querySelector('i.fa')) {
+          el.innerHTML = '<i class="fa fa-circle-info"></i> ' + (el.getAttribute('data-label') || el.textContent || 'Info');
+        }
+      });
+    });
+  }
+
+  // jednoduchý popover pre "Info"
+  var pop;
+  function showPopover(target, html){
+    hidePopover();
+    pop = document.createElement('div');
+    pop.className = 'b2c-popover';
+    pop.innerHTML = html;
+    document.body.appendChild(pop);
+    var r = target.getBoundingClientRect();
+    var top = window.scrollY + r.bottom + 8;
+    var left = Math.min(window.scrollX + r.left, window.scrollX + window.innerWidth - pop.offsetWidth - 12);
+    pop.style.top = top + 'px';
+    pop.style.left = left + 'px';
+    setTimeout(function(){ document.addEventListener('click', onDocClick, {once:true}); }, 0);
+  }
+  function hidePopover(){
+    if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+    pop = null;
+  }
+  function onDocClick(e){
+    if (!pop || pop.contains(e.target)) return;
+    hidePopover();
+  }
+
+  function infoHtmlFrom(el){
+    var title = (el.closest('.product-item')?.querySelector('.pi-title')?.textContent || '').trim();
+    var extra = el.getAttribute('data-info') || el.getAttribute('title') || el.getAttribute('aria-label') || '';
+    var price = (el.closest('.product-item')?.querySelector('.pi-price')?.textContent || '').trim();
+    var unit = (el.closest('.product-item')?.querySelector('.unit, .jednotka')?.textContent || '').trim();
+    var lines = [];
+    if (title) lines.push('<h6>'+escapeHtml(title)+'</h6>');
+    if (price) lines.push('<div class="muted">'+escapeHtml(price)+(unit?(' · '+escapeHtml(unit)):'')+'</div>');
+    if (extra) lines.push('<div style="margin-top:.35rem">'+escapeHtml(extra)+'</div>');
+    if (!lines.length) lines.push('<div class="muted">Nie sú dostupné detaily.</div>');
+    return lines.join('');
+  }
+  function escapeHtml(s){return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]))}
+
+  function bindInfoPopovers(scope){
+    (scope||document).addEventListener('click', function(ev){
+      var t = ev.target.closest('.info-btn');
+      if (!t) return;
+      ev.preventDefault();
+      var html = infoHtmlFrom(t);
+      showPopover(t, html);
+    });
+  }
+
+  // Spusti po načítaní DOM a aj po dynamickom prekreslení cenníka (ak tvoj b2c.js volá render)
+  document.addEventListener('DOMContentLoaded', function(){
+    enhancePricelist();
+    bindInfoPopovers();
+
+    // Ak tvoj kód emituje vlastný event po rendri, počúvame ho:
+    document.addEventListener('pricelist:rendered', function(e){
+      enhancePricelist(e.target || document);
+    });
+  });
+})();
+</script>
+<script>
+/* Blokuje ENTER v objednávkovom formulári (len fyzický klik myšou/touch môže odoslať) */
+(function(){
+  function wireOrderFormGuards(){
+    var form = document.getElementById('orderForm');
+    if(!form) return;
+
+    // 1) Nikdy neodosielaj ENTERom (okrem textarea)
+    form.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+      }
+    });
+
+    // 2) Povoliť odoslanie iba po fyzickom "pointer" kliku na submit tlačidlo
+    var submitViaPointer = false;
+
+    // zachytíme fyzický klik/touch na ktorékoľvek submit tlačidlo vo formulári (aj keď sa renderuje dynamicky)
+    form.addEventListener('pointerdown', function(e){
+      var btn = e.target && e.target.closest('button[type="submit"], input[type="submit"]');
+      if (btn) submitViaPointer = true;
+    }, true);
+
+    form.addEventListener('submit', function(e){
+      if (!submitViaPointer) {
+        // blokuj submit vyvolaný Enterom alebo skriptom
+        e.preventDefault();
+        // voliteľne: tu môžeš ukázať toast "Klikni na tlačidlo Odoslať"
+        // alert('Odoslať objednávku je možné iba kliknutím na tlačidlo „Odoslať“.');
+      }
+      submitViaPointer = false; // reset
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', wireOrderFormGuards);
+
+  // Ak tvoj b2c.js cenník prerenderuje a znova vytvorí #orderForm,
+  // sem po rendri vystreľ vlastný event: document.dispatchEvent(new Event('order:rendered'))
+  document.addEventListener('order:rendered', wireOrderFormGuards);
+})();
+</script>
+
+    <!-- Mini skript pre anti-bot: nastaví timestamp a načíta otázku „Nie som robot“ -->
+    <script>
+      (function(){
+        document.addEventListener('DOMContentLoaded', function(){
+          var tsInput = document.querySelector('#registerForm input[name="form_ts"]');
+          if (tsInput) tsInput.value = String(Date.now());
+          try {
+            fetch('/api/b2c/captcha/new')
+              .then(function(r){ return r.json(); })
+              .then(function(d){
+                var q = document.getElementById('captcha-question');
+                if (q) q.textContent = d.question || 'Koľko je 3 + 4?';
+              });
+          } catch(e) {}
+        });
+      })();
+    </script>
 </body>
 </html>
-

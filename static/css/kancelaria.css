@@ -1,0 +1,387 @@
+/* =====================================================================
+   KANCELÁRIA – kompletný štýl (BASE + MAIL PRO, namespacované)
+   ===================================================================== */
+
+/* ---------- ZÁKLAD A PREMENNÉ ---------- */
+:root{
+  --primary-color:#f65c5c;
+  --secondary-color:#6b7280;
+  --success-color:#16a34a;
+  --warning-color:#f59e0b;
+  --danger-color:#ef4444;
+
+  --light:#f9fafb; --mid:#e5e7eb; --dark:#374151;
+  --font:'Inter',sans-serif;
+  --radius:.5rem;
+  --shadow:0 4px 6px -1px rgb(0 0 0/0.1),0 2px 4px -2px rgb(0 0 0/0.1);
+
+  /* Buttons */
+  --btn-radius:9999px;
+  --btn-font:0.95rem;
+  --btn-pad-y:.72rem;
+  --btn-pad-x:1.15rem;
+  --btn-shadow:0 10px 20px -10px rgba(0,0,0,.35), 0 6px 12px -8px rgba(0,0,0,.18);
+  --btn-shadow-hover:0 16px 32px -14px rgba(0,0,0,.35), 0 10px 20px -10px rgba(0,0,0,.20);
+}
+
+html,body{height:100%;margin:0;padding:0;overflow-x:hidden;overflow-y:auto}
+body{font-family:var(--font);background:var(--light);color:var(--dark)}
+.hidden{display:none !important}
+
+/* ---------- LOGIN ---------- */
+.login-wrapper{width:100%;height:100%;display:flex;justify-content:center;align-items:center;padding:2rem;box-sizing:border-box}
+.login-container{width:100%;max-width:400px;padding:2.5rem;background:#fff;border-radius:var(--radius);box-shadow:var(--shadow)}
+.login-container h2{margin:0 0 1rem 0;text-align:center}
+
+/* ---------- APP LAYOUT ---------- */
+.app-container{width:100%;height:100%;display:flex;flex-direction:column;background:#fff}
+.app-header{background:var(--primary-color);color:#fff;padding:1rem 1.5rem;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;z-index:20}
+.app-header h1{margin:0;font-size:1.5rem}
+.app-header p{margin:.25rem 0 0;opacity:.85;font-size:.9rem}
+
+.main-layout{display:flex;flex:1;min-height:0;overflow:hidden}
+.sidebar{width:240px;background:#fff;border-right:1px solid var(--mid);padding:1.5rem 1rem;flex-shrink:0;overflow:auto}
+.sidebar-nav{list-style:none;margin:0;padding:0}
+.sidebar-nav a{display:flex;align-items:center;padding:.75rem 1rem;border-radius:.55rem;text-decoration:none;color:var(--dark);font-weight:600;transition:.2s;background:transparent;cursor:pointer}
+.sidebar-nav a i{margin-right:.75rem;width:20px;text-align:center}
+.sidebar-nav a:hover{background:#f3f4f6}
+.sidebar-nav a.active{background:var(--primary-color);color:#fff}
+
+.main-content{flex:1;min-width:0;min-height:0;padding:2rem;overflow:auto}
+.content-section{display:none}
+.content-section.active{display:block}
+
+/* ---------- TYPO & FORM ---------- */
+h3{font-size:1.5rem;margin:0 0 1rem 0;padding:0 0 .75rem;border-bottom:1px solid var(--mid)}
+h4{margin:1rem 0}
+.form-group{margin-bottom:1rem}
+.form-group label{font-weight:600;margin-bottom:.25rem;display:block}
+input,select,textarea{width:100%;padding:.75rem;border-radius:.375rem;border:1px solid var(--mid);box-sizing:border-box;font:inherit}
+
+/* ---------- BUTTONS ---------- */
+.btn, button.btn, a.btn,
+button[class*="btn-"], a[class*="btn-"],
+input[type=button].btn, input[type=submit].btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
+  padding:var(--btn-pad-y) var(--btn-pad-x);
+  border:0; border-radius:var(--btn-radius);
+  font-weight:700; font-size:var(--btn-font); line-height:1;
+  color:#fff; text-decoration:none;
+  background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--secondary-color);
+  box-shadow:var(--btn-shadow);
+  transition:transform .12s ease, box-shadow .12s ease, filter .15s ease, background-color .2s ease, opacity .2s ease;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--btn-shadow-hover);filter:brightness(1.05)}
+.btn:active{transform:translateY(0);box-shadow:var(--btn-shadow);filter:brightness(.98)}
+.btn:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none;filter:none}
+.btn-primary{background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--primary-color)}
+.btn-secondary{background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--secondary-color)}
+.btn-success{background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--success-color)}
+.btn-warning{background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--warning-color); color:#111827}
+.btn-danger{ background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)) , var(--danger-color)}
+.btn-icon{padding:.6rem; width:2.5rem; height:2.5rem; border-radius:9999px}
+
+/* ---------- KARTY & TABUĽKY ---------- */
+.card{background:#fff;border:1px solid var(--mid);border-radius:12px;box-shadow:var(--shadow)}
+.card > .card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--mid)}
+.card > .card-body{padding:12px 14px}
+.card > .card-footer{padding:10px 14px;border-top:1px solid var(--mid);display:flex;gap:8px;justify-content:flex-end}
+
+table{width:100%;border-collapse:collapse}
+th,td{padding:.75rem 1rem;text-align:left;border-bottom:1px solid var(--mid)}
+th{background:#f8fafc;font-weight:700;position:sticky;top:0;z-index:5}
+
+/* ---------- MODAL ---------- */
+#modal-container{display:none;position:fixed;inset:0;z-index:1000;justify-content:center;align-items:center}
+#modal-container.visible{display:flex}
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.modal-content{background:#fff;padding:2rem;border-radius:12px;z-index:1001;width:90%;max-width:950px;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--mid);padding-bottom:1rem;margin-bottom:1rem}
+.modal-header h3{margin:0;border:none}
+.close-btn{background:none;border:none;font-size:2rem;cursor:pointer;color:var(--secondary-color)}
+.modal-body{overflow:auto}
+
+/* ---------- UTIL GRID ---------- */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media (max-width:900px){ .form-grid{grid-template-columns:1fr} }
+
+/* =====================================================================
+   MAIL PRO (prísne namespacované na #section-mail)
+   ===================================================================== */
+
+/* Layout – sidebar + hlavná časť */
+#section-mail .mail-layout{
+  display:grid;
+  grid-template-columns:260px minmax(520px,1fr);
+  gap:16px; align-items:start;
+}
+#section-mail .mail-aside{grid-column:1}
+#section-mail .mail-main{grid-column:2;display:grid;grid-template-rows:auto 1fr;gap:12px;min-height:0}
+
+/* Toolbar nad zoznamom */
+#section-mail .mail-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#section-mail .mail-toolbar input[type="text"]{flex:1 1 320px;min-width:280px}
+
+/* Split: zoznam + detail/compose */
+#section-mail .mail-split{
+  display:grid; gap:12px; min-height:0;
+  grid-template-columns:minmax(420px,1fr) minmax(420px,540px);
+}
+#section-mail .mail-split:not(.has-detail) #mail-detail{display:none}
+#section-mail .mail-split:not(.has-detail) #mail-list-card{grid-column:1 / -1}
+
+/* Zoznam – sticky head, kompaktnejšie riadky */
+#section-mail #mail-list-card thead th{position:sticky;top:0;background:#fff;z-index:1}
+#section-mail #mail-list-card td,#section-mail #mail-list-card th{padding:10px 12px}
+#section-mail #mail-list-card tbody tr{cursor:pointer}
+#section-mail #mail-table td:nth-child(1){max-width:0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+
+/* Sidebar – priečinky a badge len v pošte */
+#section-mail .folder-title{font-weight:700;margin:.5rem 0 .25rem}
+#section-mail .folder-list .mail-folder-link{padding:6px 8px;border-radius:10px;text-decoration:none;color:inherit;display:flex;align-items:center;gap:.5rem}
+#section-mail .folder-list .mail-folder-link:hover{background:#f3f4f6}
+#section-mail .folder-list .mail-folder-link.active{background:#eef2ff}
+#section-mail .badge{
+  display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:2px 8px;font-size:.8rem;
+  background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;
+}
+
+/* Detail panel – scroll len vnútri, nie celej stránky */
+#section-mail #mail-detail{max-height:calc(100vh - 260px);overflow:auto}
+
+/* Compose – editor vo vnútri panelu (výška nech je príjemná) */
+#section-mail .tox.tox-tinymce{border-radius:10px;box-shadow:none;border:1px solid var(--mid)}
+#section-mail .form-grid.mail-compose-grid{grid-template-columns:110px 1fr}
+
+/* Responzívne správanie */
+@media (max-width:1280px){
+  #section-mail .mail-layout{grid-template-columns:240px 1fr}
+  #section-mail .mail-split{grid-template-columns:1fr 480px}
+}
+@media (max-width:1024px){
+  #section-mail .mail-layout{grid-template-columns:1fr}
+  #section-mail .mail-aside{order:2}
+  #section-mail .mail-main{order:1}
+  #section-mail .mail-split{grid-template-columns:1fr}
+  #section-mail .mail-split.has-detail #mail-list-card{display:none}
+  #section-mail #mail-detail{max-height:unset}
+}
+
+/* Malé utilky pre poštu (len v scope pošty) */
+#section-mail .text-danger{color:var(--danger-color)}
+#section-mail .btn-group-vertical{display:flex;flex-direction:column;gap:.5rem}
+/* ===== Mail – detail (komfortné čítanie) ===== */
+#section-mail .detail         { display:grid; gap:16px; padding:14px; }
+#section-mail .detail-header  { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+#section-mail .subject        { font-size:1.25rem; font-weight:800; line-height:1.35; margin:0; word-break:break-word; }
+#section-mail .actions        { display:flex; gap:8px; flex-wrap:wrap; }
+
+#section-mail .meta{
+  display:grid; grid-template-columns:120px 1fr;
+  column-gap:12px; row-gap:8px;
+  padding:12px; background:#f8fafc; border:1px solid var(--mid); border-radius:10px;
+}
+#section-mail .meta .k{ color:#6b7280; font-weight:600; align-self:start; }
+#section-mail .meta .v{ line-height:1.45; }
+#section-mail .address{ display:inline-block; background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:999px; font-size:.85rem; margin:2px 6px 2px 0; }
+
+#section-mail .attachments   { padding-top:10px; border-top:1px dashed var(--mid); }
+#section-mail .att-list      { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+#section-mail .chip          { display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--mid); border-radius:999px; padding:6px 10px; }
+#section-mail .chip i        { opacity:.75; }
+
+#section-mail .body-wrap     { border:1px solid var(--mid); border-radius:10px; padding:14px; background:#fff; }
+#section-mail .body          { line-height:1.62; color:#111827; }
+#section-mail .body pre      { white-space:pre-wrap; background:#f9fafb; padding:12px; border-radius:8px; margin:0; }
+
+/* Zoznam – komfortnejšie riadky a hover */
+#section-mail #mail-table tbody tr td { padding:12px 14px; }
+#section-mail #mail-table tbody tr:hover { background:#f9fafb; }
+/* Single-panel prepínač (len Pošta) */
+#section-mail .view { display:none; }
+#section-mail .view.active { display:block; }
+/* ===========================
+   THEME v2 – GLOBAL OVERRIDES
+   (vložiť na úplný koniec súboru)
+   =========================== */
+
+/* 1) Jemnejšia paleta (prívetivá, jednotná) */
+:root{
+  /* brand */
+  --primary-color: #ff5d6a;   /* koralová – hl. akcie, hlavička */
+  --secondary-color: #3b82f6; /* jemná modrá – sekundárne akcie */
+
+  /* stavy (ponechané, ale mierne zjemnené ak treba) */
+  --success-color:#16a34a;
+  --warning-color:#f59e0b;
+  --danger-color:#ef4444;
+
+  /* vizuál tlačidiel */
+  --btn-radius: 9999px;
+  --btn-font: 0.95rem;
+  --btn-pad-y: .72rem;
+  --btn-pad-x: 1.15rem;
+}
+
+/* 2) VŠETKY tlačidlá v appke – jednotný vzhľad + rozostupy */
+.content-section .btn,
+.content-section button.btn,
+.content-section a.btn,
+.content-section button[class*="btn-"],
+.content-section a[class*="btn-"]{
+  border-radius: var(--btn-radius)!important;
+  padding: var(--btn-pad-y) var(--btn-pad-x)!important;
+  font-weight: 700!important;
+  line-height: 1!important;
+  display: inline-flex!important;
+  align-items: center;
+  gap: .55rem;
+  margin: 4px 10px 10px 0;      /* --- rozostupy medzi tlačidlami --- */
+}
+
+/* 3) Jednotné farby variánt tlačidiel (žiadna hnedá/sivá) */
+.btn,
+button.btn,
+a.btn,
+.btn-secondary{ /* default aj sekundárne = modré */
+  color:#fff!important;
+  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--secondary-color)!important;
+  box-shadow: var(--btn-shadow)!important;
+}
+.btn:hover,
+.btn-secondary:hover{
+  filter:brightness(1.05);
+  box-shadow: var(--btn-shadow-hover)!important;
+}
+
+.btn-primary{  /* primárna – koralová */
+  color:#fff!important;
+  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--primary-color)!important;
+  box-shadow: var(--btn-shadow)!important;
+}
+.btn-primary:hover{
+  filter:brightness(1.06);
+  box-shadow: var(--btn-shadow-hover)!important;
+}
+
+.btn-success{  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--success-color)!important; }
+.btn-warning{  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--warning-color)!important; color:#111827!important; }
+.btn-danger{   background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--danger-color)!important; }
+
+/* jemné alternatívy */
+.btn-outline{
+  color: var(--secondary-color)!important;
+  background: transparent!important;
+  border: 2px solid currentColor!important;
+  box-shadow: none!important;
+}
+.btn-soft{
+  color:#0f172a!important;
+  background: #eef2ff!important;
+  border: 1px solid #c7d2fe!important;
+  box-shadow: none!important;
+}
+
+/* 4) TOOLBARY – nech sa ovládanie neradí pod seba, ale vedľa seba s medzerou */
+#section-stock .toolbar,
+#section-order-forecast .toolbar,
+#section-b2b-admin .toolbar,
+#section-b2c-admin .toolbar,
+#section-fleet .toolbar,
+#section-profitability .toolbar,
+#section-costs .toolbar,
+#section-erp-admin .toolbar {
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+}
+
+/* fallback: veľa strán nemá .toolbar – aspoň prvý „riadok“ zarovnáme do flexu */
+#section-stock > .card:first-of-type > .card-header,
+#section-order-forecast > .card:first-of-type > .card-header,
+#section-b2b-admin   > .card:first-of-type > .card-header,
+#section-b2c-admin   > .card:first-of-type > .card-header,
+#section-fleet       > .card:first-of-type > .card-header,
+#section-profitability > .card:first-of-type > .card-header,
+#section-costs       > .card:first-of-type > .card-header {
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+}
+
+/* 5) „Nalepené“ prvky v starších moduloch – univerzálny spacing */
+#section-stock .btn,             #section-stock select,             #section-stock input[type="text"],
+#section-order-forecast .btn,    #section-order-forecast select,    #section-order-forecast input[type="text"],
+#section-b2b-admin .btn,         #section-b2b-admin select,         #section-b2b-admin input[type="text"],
+#section-b2c-admin .btn,         #section-b2c-admin select,         #section-b2c-admin input[type="text"],
+#section-fleet .btn,             #section-fleet select,             #section-fleet input[type="text"],
+#section-profitability .btn,     #section-profitability select,     #section-profitability input[type="text"],
+#section-costs .btn,             #section-costs select,             #section-costs input[type="text"]{
+  margin-right:10px;
+  margin-bottom:10px;
+}
+
+/* 6) Tabuľky – o chlp vzdušnejšie riadky pre prehľadnosť */
+#section-stock table td,              #section-stock table th,
+#section-order-forecast table td,     #section-order-forecast table th,
+#section-b2b-admin table td,          #section-b2b-admin table th,
+#section-b2c-admin table td,          #section-b2c-admin table th,
+#section-fleet table td,              #section-fleet table th,
+#section-profitability table td,      #section-profitability table th,
+#section-costs table td,              #section-costs table th{
+  padding: 10px 12px;
+}
+
+/* 7) Odstránenie hranatých mini-buttonov v starších moduloch */
+#section-stock .btn, #section-order-forecast .btn, #section-b2b-admin .btn, #section-b2c-admin .btn,
+#section-fleet .btn, #section-profitability .btn, #section-costs .btn {
+  min-height: 38px;
+  border-radius: var(--btn-radius)!important;
+}
+
+/* 8) Doplnky pre Expedičný plán – sekundárne akcie nech sú rovnako pekné */
+#section-order-forecast .btn-secondary {
+  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.06)), var(--secondary-color)!important;
+  color:#fff!important;
+}
+
+/* 9) (Voliteľné) Zjednotenie malých ikon-tlačidiel */
+#section-stock .btn-icon, #section-order-forecast .btn-icon, #section-b2b-admin .btn-icon, #section-b2c-admin .btn-icon,
+#section-fleet .btn-icon, #section-profitability .btn-icon, #section-costs .btn-icon {
+  width: 2.35rem; height: 2.35rem; border-radius: 9999px; padding: .55rem;
+}
+
+
+/* === Tab content visibility (Fleet) === */
+.b2b-tab-content { display:none; }
+.b2b-tab-content.active { display:block; }
+
+
+/* === Fleet buttons - rounded pill style (scoped) === */
+#section-fleet .btn { 
+  border-radius: 9999px !important; 
+  padding: .6rem 1rem !important; 
+  font-weight: 700; 
+  box-shadow: var(--btn-shadow); 
+}
+#section-fleet .btn.btn-xs { padding: .35rem .7rem !important; }
+#section-fleet .btn i { margin-right: .35rem; }
+
+/* === Analysis table (professional look) === */
+#section-fleet .analysis-card {
+  background:#fff; border-radius: var(--radius); box-shadow: var(--shadow); padding:1rem;
+}
+#section-fleet .analysis-table {
+  width:100%; border-collapse: collapse; font-size: 0.95rem;
+}
+#section-fleet .analysis-table th, 
+#section-fleet .analysis-table td {
+  border-bottom:1px solid var(--mid); padding:.6rem .7rem; text-align:left;
+}
+#section-fleet .analysis-table tbody tr:hover { background: #fafafa; }
+#section-fleet .kpi-badges { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:.75rem; }
+#section-fleet .kpi-badge { 
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.45rem .7rem; border-radius:9999px; background:var(--light); 
+  font-weight:600; box-shadow: 0 1px 2px rgba(0,0,0,.06) inset;
+}
+#section-fleet .delta { font-weight: 700; }
+#section-fleet .delta.up { color: var(--success-color); }
+#section-fleet .delta.down { color: var(--danger-color); }
+

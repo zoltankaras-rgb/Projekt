@@ -1,0 +1,35 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "Ty debil",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421903205443"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32956516",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50778386,
+            "phonenr": "+421903205443"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

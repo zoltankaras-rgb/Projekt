@@ -1,0 +1,8 @@
+{"ts": "2025-11-05T08:22:05.057653Z", "customer_id": 9, "delta": 100, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T08:57:45.137935Z", "customer_id": 9, "delta": 100, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T08:57:54.449907Z", "customer_id": 9, "delta": -100, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T08:58:03.517504Z", "customer_id": 9, "delta": 100, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T10:04:48.557025Z", "customer_id": 9, "delta": 150, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T10:04:48.583151Z", "customer_id": 10, "delta": 150, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T10:05:07.406007Z", "customer_id": 9, "delta": 100, "reason": "bulk-adjust"}
+{"ts": "2025-11-05T10:05:07.841925Z", "customer_id": 10, "delta": 100, "reason": "bulk-adjust"}

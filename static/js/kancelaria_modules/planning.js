@@ -3,21 +3,41 @@
 // =================================================================
 
 function initializePlanningModule() {
-    const container = document.getElementById('section-planning');
-    if (!container) return;
-    container.innerHTML = `
-        <h3>Plánovanie a Reporty</h3>
-        <div class="btn-grid">
-            <button id="show-plan-btn" class="btn-primary"><i class="fas fa-tasks"></i> Plán Výroby</button>
-            <button id="show-purchase-btn" class="btn-info"><i class="fas fa-shopping-cart"></i> Návrh Nákupu</button>
-            <button id="show-prod-stats-btn" class="btn-secondary"><i class="fas fa-chart-bar"></i> Prehľad Výroby</button>
-            <button id="show-print-reports-btn" class="btn-warning"><i class="fas fa-print"></i> Tlač Reportov</button>
-        </div>
-    `;
-    document.getElementById('show-plan-btn').onclick = () => showModal('Týždenný Plánovač Výroby', createProductionPlanContent);
-    document.getElementById('show-purchase-btn').onclick = () => showModal('Návrh Nákupu', createPurchaseSuggestionsContent);
-    document.getElementById('show-prod-stats-btn').onclick = () => showModal('Prehľad Výroby', createProductionStatsContent);
-    document.getElementById('show-print-reports-btn').onclick = () => showModal('Tlač Reportov', createPrintReportsContent);
+  const container = document.getElementById('section-planning');
+  if (!container) return;
+
+  container.innerHTML = `
+    <h3>Plánovanie a Reporty</h3>
+    <div class="btn-grid">
+      <button id="show-plan-btn" class="btn-primary"><i class="fas fa-tasks"></i> Plán Výroby</button>
+      <button id="show-purchase-btn" class="btn-info"><i class="fas fa-shopping-cart"></i> Návrh Nákupu</button>
+      <button id="show-prod-stats-btn" class="btn-secondary"><i class="fas fa-chart-bar"></i> Prehľad Výroby</button>
+      <button id="show-reception-report-btn" class="btn-primary"><i class="fas fa-clipboard-list"></i> Príjem z výroby</button>
+      <button id="show-print-reports-btn" class="btn-warning"><i class="fas fa-print"></i> Tlač Reportov</button>
+    </div>
+
+    <!-- NOVÉ: inline kontajner pre plánovač -->
+    <div id="planner-inline-root" class="card" style="margin-top:1rem; display:none;"></div>
+  `;
+
+  document.getElementById('show-reception-report-btn').onclick =
+    () => showModal('Príjem z výroby (podľa dátumu)', createReceptionReportContent);
+
+  // NAMIETO modalu vyrenderujeme plánovač inline
+  document.getElementById('show-plan-btn').onclick = () => {
+    document.getElementById('planner-inline-root').style.display = 'block';
+    renderProductionPlanInline();
+    // scroll k plánovaču
+    document.getElementById('planner-inline-root').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Ostatné nechávame v modale (bez zmien)
+  document.getElementById('show-purchase-btn').onclick =
+    () => showModal('Návrh Nákupu', createPurchaseSuggestionsContent);
+  document.getElementById('show-prod-stats-btn').onclick =
+    () => showModal('Prehľad Výroby', createProductionStatsContent);
+  document.getElementById('show-print-reports-btn').onclick =
+    () => showModal('Tlač Reportov', createPrintReportsContent);
 }
 
 async function createProductionPlanContent() {
@@ -85,46 +105,52 @@ async function createProductionPlanContent() {
 }
 
 async function createTasksFromPlan() {
-    const planData = [];
-    const getNextDayOfWeek = (dayIndex) => { // 0=Mon, 1=Tue, ...
-        const today = new Date();
-        const resultDate = new Date(today);
-        const currentDay = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-        const targetDay = dayIndex + 1; // JS Sunday is 0, we want Monday as 1
-        let dayDifference = targetDay - (currentDay === 0 ? 7 : currentDay);
-        if (dayDifference < 0) {
-            dayDifference += 7;
-        }
-        resultDate.setDate(today.getDate() + dayDifference);
-        return resultDate.toISOString().split('T')[0];
-    };
-    
-    document.querySelectorAll('#modal-container tbody tr[data-product-name]').forEach((row) => {
-        const dayValue = row.querySelector('.day-select').value;
-        if (dayValue === 'Nenaplánované') return; // Skip unplanned items
+  // Najprv skús inline, potom modal (spätná kompatibilita)
+  const scope = document.getElementById('planner-inline-root') || document.getElementById('modal-container');
+  if (!scope) { showStatus("Plánovač nie je dostupný.", true); return; }
 
-        const dayIndex = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok'].indexOf(dayValue);
-        const date = getNextDayOfWeek(dayIndex);
-        
-        planData.push({
-            nazov_vyrobku: row.dataset.productName,
-            navrhovana_vyroba: parseFloat(row.querySelector('.planned-qty-input').value),
-            datum_vyroby: date,
-            priorita: row.querySelector('.priority-checkbox').checked
-        });
+  const planData = [];
+
+  const getNextDayOfWeek = (dayIndex) => { // 0=Mon, 1=Tue, ...
+    const today = new Date();
+    const resultDate = new Date(today);
+    const currentDay = today.getDay(); // 0=Sun..6=Sat
+    const targetDay = dayIndex + 1;    // chceme Po=1
+    let diff = targetDay - (currentDay === 0 ? 7 : currentDay);
+    if (diff < 0) diff += 7;
+    resultDate.setDate(today.getDate() + diff);
+    return resultDate.toISOString().split('T')[0];
+  };
+
+  scope.querySelectorAll('tbody tr[data-product-name]').forEach((row) => {
+    const dayValue = row.querySelector('.day-select')?.value || 'Nenaplánované';
+    if (dayValue === 'Nenaplánované') return;
+
+    const dayIndex = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok'].indexOf(dayValue);
+    const date = getNextDayOfWeek(Math.max(0, dayIndex));
+
+    planData.push({
+      nazov_vyrobku: row.dataset.productName,
+      navrhovana_vyroba: parseFloat(row.querySelector('.planned-qty-input').value || '0'),
+      datum_vyroby: date,
+      priorita: !!row.querySelector('.priority-checkbox')?.checked
     });
+  });
 
-    if (planData.length === 0) {
-        showStatus("Žiadne výrobné úlohy nie sú naplánované na pracovné dni.", true);
-        return;
-    }
+  if (planData.length === 0) {
+    showStatus("Žiadne výrobné úlohy nie sú naplánované na pracovné dni.", true);
+    return;
+  }
 
-    try {
-        await apiRequest('/api/kancelaria/createTasksFromPlan', { method: 'POST', body: planData });
-        document.getElementById('modal-container').style.display = 'none';
-    } catch (e) { 
-        // Chyba je už spracovaná v apiRequest
-    }
+  try {
+    await apiRequest('/api/kancelaria/createTasksFromPlan', { method: 'POST', body: planData });
+    showStatus("Výrobné úlohy vytvorené.", false);
+    // ak by to bežalo v modale, môžeš zatvoriť
+    const modal = document.getElementById('modal-container');
+    if (modal && modal.contains(scope)) modal.style.display = 'none';
+  } catch (e) {
+    // apiRequest rieši chyby
+  }
 }
 
 async function createPurchaseSuggestionsContent() {
@@ -195,6 +221,68 @@ async function createProductionStatsContent() {
     };
     return { html, onReady };
 }
+async function createReceptionReportContent() {
+  const to = new Date();
+  const from = new Date(to); from.setDate(from.getDate() - 6);
+  const html = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;align-items:end">
+      <div><label>Od (dátum PRÍJMU):</label><input type="date" id="rr-date-from" value="${from.toISOString().slice(0,10)}"></div>
+      <div><label>Do (dátum PRÍJMU):</label><input type="date" id="rr-date-to"   value="${to.toISOString().slice(0,10)}"></div>
+      <div><label>Koeficient réžií:</label><input type="number" id="rr-overhead" step="0.01" value="1.15"></div>
+      <div><button class="btn-primary" id="rr-load-btn"><i class="fas fa-download"></i> Načítať</button></div>
+    </div>
+    <div id="rr-table" class="table-container" style="margin-top:1rem"></div>
+  `;
+  const onReady = () => {
+    document.getElementById('rr-load-btn').onclick = loadReceptionReport;
+  };
+  return { html, onReady };
+}
+
+async function loadReceptionReport() {
+  const date_from = document.getElementById('rr-date-from').value;
+  const date_to   = document.getElementById('rr-date-to').value;
+  const overhead  = parseFloat(document.getElementById('rr-overhead').value || '1.15');
+  if (!date_from || !date_to) { showStatus("Zadajte od-do.", true); return; }
+
+  const res = await apiRequest('/api/kancelaria/receptionReport', {
+    method: 'POST', body: { date_from, date_to, overhead_coeff: overhead }
+  });
+  const table = document.getElementById('rr-table');
+  if (!res || !res.rows || res.rows.length === 0) {
+    table.innerHTML = '<div style="padding:1rem">V období nebol žiadny príjem.</div>'; return;
+  }
+  let html = `<table>
+    <thead>
+      <tr>
+        <th>Produkt</th><th>MJ</th>
+        <th>Plán (kg)</th><th>Realita (kg)</th><th>Výťažnosť (%)</th>
+        <th>Cena/jed. bez E.</th><th>Cena/jed. s E.</th>
+      </tr>
+    </thead><tbody>`;
+  res.rows.forEach(r => {
+    html += `<tr>
+      <td>${escapeHtml(r.product)}</td>
+      <td>${escapeHtml(r.unit)}</td>
+      <td style="text-align:right">${Number(r.planned_kg).toFixed(3)}</td>
+      <td style="text-align:right">${Number(r.real_kg).toFixed(3)}</td>
+      <td style="text-align:right">${r.yield_pct != null ? Number(r.yield_pct).toFixed(2) : ''}</td>
+      <td style="text-align:right">${Number(r.unit_cost_no_overhead).toFixed(4)}</td>
+      <td style="text-align:right">${Number(r.unit_cost_with_overhead).toFixed(4)}</td>
+    </tr>`;
+  });
+  html += `</tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2" style="text-align:right">Súčty:</th>
+        <th style="text-align:right">${Number(res.totals.planned_kg).toFixed(3)}</th>
+        <th style="text-align:right">${Number(res.totals.real_kg).toFixed(3)}</th>
+        <th style="text-align:right">${Number(res.totals.yield_pct).toFixed(2)}</th>
+        <th colspan="2"></th>
+      </tr>
+    </tfoot></table>`;
+  table.innerHTML = html;
+}
 
 async function createPrintReportsContent() { 
     await ensureOfficeDataIsLoaded(); 
@@ -222,3 +310,171 @@ function generateInventoryReport() {
     window.open(`/report/inventory?date=${date}`, '_blank'); 
 }
 
+function ensurePlannerStyles() {
+  if (document.getElementById('planner-styles')) return;
+  const css = `
+    /* decent, čisté štýly pre inline plánovač */
+    .planner-toolbar { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin-bottom:.75rem }
+    .planner-toolbar .spacer { flex:1 }
+    .planner-stat { font-size:.9rem; color:#555 }
+    .planner-grid { display:grid; grid-template-columns: 1fr; gap: .75rem; }
+    .planner-card { border:1px solid #e5e7eb; border-radius:8px; padding:12px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04) }
+    .planner-table-container { max-height: 62vh; overflow:auto; border-radius:8px; border:1px solid #e5e7eb; }
+    .planner-table-container table { width:100%; border-collapse:collapse; }
+    .planner-table-container thead th { position:sticky; top:0; background:#f8fafc; z-index:1 }
+    .planner-table-container th, .planner-table-container td { border-bottom:1px solid #f1f5f9; padding:8px; text-align:left }
+    .planner-cat-row { background:#f3f4f6; font-weight:600 }
+    .planner-actions { display:flex; gap:.5rem; align-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:.35rem; padding:.2rem .5rem; background:#f1f5f9; border-radius:999px; font-size:.8rem; color:#334155 }
+    .chip b { font-weight:700; color:#0f172a }
+    @media (min-width: 1100px) {
+      .planner-grid { grid-template-columns: 2fr 1fr; }
+    }
+  `;
+  const s = document.createElement('style');
+  s.id = 'planner-styles';
+  s.textContent = css;
+  document.head.appendChild(s);
+}
+
+async function renderProductionPlanInline() {
+  ensurePlannerStyles();
+  const root = document.getElementById('planner-inline-root');
+  if (!root) return;
+
+  root.innerHTML = `
+    <div class="planner-toolbar">
+      <h3 style="margin:0">Týždenný Plánovač Výroby</h3>
+      <div class="spacer"></div>
+      <input id="planner-search" type="search" placeholder="Hľadať produkt…" style="min-width:220px; padding:6px 8px">
+      <select id="planner-category" style="padding:6px 8px"><option value="__ALL__">Všetky kategórie</option></select>
+      <button id="planner-refresh" class="btn-secondary" style="margin:0"><i class="fas fa-sync-alt"></i> Obnoviť</button>
+      <button id="planner-create-tasks" class="btn-success" style="margin:0"><i class="fas fa-tasks"></i> Vytvoriť úlohy</button>
+    </div>
+    <div class="planner-grid">
+      <div class="planner-card">
+        <div id="planner-table" class="planner-table-container"></div>
+      </div>
+      <div class="planner-card">
+        <h4 style="margin:0 0 .5rem 0">Zhrnutie</h4>
+        <div class="planner-stat" id="planner-summary">
+          <span class="chip"><b>0</b> položiek</span>
+          <span class="chip"><b>0</b> kg potreba</span>
+          <span class="chip"><b>0</b> kg navrhovaná výroba</span>
+        </div>
+        <p style="margin-top:1rem;color:#475569">Tip: zadaj „Deň výroby“ a označ „Priorita“ pri dôležitých položkách. Následne klikni <em>Vytvoriť úlohy</em>.</p>
+      </div>
+    </div>
+  `;
+
+  const elSearch = root.querySelector('#planner-search');
+  const elCat    = root.querySelector('#planner-category');
+  const elTable  = root.querySelector('#planner-table');
+  const elCreate = root.querySelector('#planner-create-tasks');
+  const elRefresh= root.querySelector('#planner-refresh');
+  const elSummary= root.querySelector('#planner-summary');
+
+  const days = ['Nenaplánované', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok'];
+  const dayOptions = days.map(d => `<option value="${d}">${d}</option>`).join('');
+
+  let DATA = {};      // { category: [items...] }
+  let CATS = [];      // ['Mleté', 'Údeniny', ...]
+  let FILTER = { q:'', cat:'__ALL__' };
+
+  const safeToFixedLocal = (v) => (v==null || isNaN(v)) ? '0' : Number(v).toFixed(3);
+
+  async function load() {
+    // načítaj plán zo servera
+    const res = await apiRequest('/api/kancelaria/getProductionPlan');
+    DATA = res || {};
+    CATS = Object.keys(DATA);
+    // naplň select kategórií
+    elCat.innerHTML = `<option value="__ALL__">Všetky kategórie</option>` + CATS.map(c=>`<option value="${c}">${escapeHtml(c)}</option>`).join('');
+    render();
+  }
+
+  function matches(item) {
+    const q = FILTER.q.trim().toLowerCase();
+    if (FILTER.cat !== '__ALL__' && FILTER.cat !== item.__cat) return false;
+    if (!q) return true;
+    return (item.nazov_vyrobku || '').toLowerCase().includes(q);
+  }
+
+  function computeSummary(rows) {
+    const cnt = rows.length;
+    const need = rows.reduce((s,r)=>s + (Number(r.celkova_potreba)||0), 0);
+    const make = rows.reduce((s,r)=>s + (Number(r.navrhovana_vyroba)||0), 0);
+    elSummary.innerHTML = `
+      <span class="chip"><b>${cnt}</b> položiek</span>
+      <span class="chip"><b>${safeToFixedLocal(need)}</b> kg potreba</span>
+      <span class="chip"><b>${safeToFixedLocal(make)}</b> kg navrhovaná výroba</span>
+    `;
+  }
+
+  function render() {
+    // priprav ploché pole s kategóriou pri každom riadku
+    const flat = [];
+    for (const [cat, items] of Object.entries(DATA)) {
+      (items||[]).forEach(it => flat.push(Object.assign({__cat:cat}, it)));
+    }
+    const rows = flat.filter(matches);
+
+    computeSummary(rows);
+
+    if (rows.length === 0) {
+      elTable.innerHTML = `<div style="padding:1rem">Nie je potrebné nič vyrábať na základe minimálnych zásob a objednávok.</div>`;
+      return;
+    }
+
+    // roztrieď späť podľa kategórie (len tie, ktoré prešli filtrom)
+    const byCat = {};
+    rows.forEach(r => (byCat[r.__cat] = byCat[r.__cat] || []).push(r));
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Produkt</th>
+            <th>Potreba (Sklad+Obj.)</th>
+            <th>Sklad</th>
+            <th>Plánovaná výroba (kg)</th>
+            <th>Deň výroby</th>
+            <th>Priorita</th>
+            <th>Akcia</th>
+          </tr>
+        </thead>
+    `;
+
+    for (const [cat, items] of Object.entries(byCat)) {
+      html += `<tbody class="production-group-tbody">
+        <tr class="planner-cat-row"><td colspan="7">${escapeHtml(cat)}</td></tr>
+      `;
+      items.forEach(item => {
+        html += `
+          <tr data-product-name="${escapeHtml(item.nazov_vyrobku)}">
+            <td>${escapeHtml(item.nazov_vyrobku)}</td>
+            <td style="text-align:right">${safeToFixed(item.celkova_potreba)} kg</td>
+            <td style="text-align:right">${safeToFixed(item.aktualny_sklad)} kg</td>
+            <td><input type="number" class="planned-qty-input" value="${item.navrhovana_vyroba}" step="10" style="width: 90px; text-align:right; padding:4px"></td>
+            <td><select class="day-select" style="padding:4px">${dayOptions}</select></td>
+            <td style="text-align:center"><input type="checkbox" class="priority-checkbox" style="width:20px;height:20px"></td>
+            <td style="text-align:center"><button class="btn-danger" style="padding:2px 8px;margin:0" onclick="this.closest('tr').remove()">×</button></td>
+          </tr>
+        `;
+      });
+      html += `</tbody>`;
+    }
+    html += `</table>`;
+
+    elTable.innerHTML = html;
+  }
+
+  // eventy
+  elSearch.oninput = (e) => { FILTER.q = e.target.value || ''; render(); };
+  elCat.onchange   = (e) => { FILTER.cat = e.target.value || '__ALL__'; render(); };
+  elRefresh.onclick= () => load();
+  elCreate.onclick = () => createTasksFromPlan();
+
+  // prvé načítanie
+  load();
+}

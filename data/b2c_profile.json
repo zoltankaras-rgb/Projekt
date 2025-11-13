@@ -1,0 +1,49 @@
+{
+  "miksro@slovanet.sk": {
+    "marketing": {
+      "email": false,
+      "sms": true,
+      "newsletter": false
+    },
+    "birthday_bonus_opt_in": true,
+    "dob": {
+      "raw": "1990-11-29",
+      "iso_ymd": "1990-11-29",
+      "md": "11-29"
+    },
+    "gdpr": {
+      "terms_version": "1.0",
+      "privacy_version": "1.0",
+      "consent_at": "2025-11-03T18:10:33.383525",
+      "ip": "127.0.0.1"
+    },
+    "last_updated": "2025-11-03T18:10:33.383525"
+  },
+  "zoltankaras@miksro.sk": {
+    "marketing": {
+      "email": true,
+      "sms": true,
+      "newsletter": true
+    },
+    "birthday_bonus_opt_in": true,
+    "dob": {
+      "raw": "19990-11-29",
+      "iso_ymd": null,
+      "md": null
+    },
+    "gdpr": {
+      "terms_version": "1.0",
+      "privacy_version": "1.0",
+      "consent_at": "2025-11-04T12:08:49.894747",
+      "ip": "127.0.0.1"
+    },
+    "last_updated": "2025-11-04T12:08:49.894747"
+  },
+  "peter.kovac@example.com": {
+    "marketing": {
+      "email": false,
+      "sms": true,
+      "newsletter": false
+    }
+  }
+}

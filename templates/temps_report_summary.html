@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <title>Súhrnný report teplôt – {{ date.strftime('%d.%m.%Y') }}</title>
+  <style>
+    body{ font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:12mm; }
+    .report{ max-width: 100%; background:#fff; padding:12px 14px; box-shadow:0 4px 10px rgba(0,0,0,.08); }
+    .hdr{ text-align:center; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin-bottom:10px; }
+    h1{ font-size:16pt; margin:0; }
+    .meta{ color:#6b7280; font-size:9pt; }
+    table{ width:100%; border-collapse: collapse; font-size:9pt; table-layout: fixed; }
+    thead th{ position: sticky; top:0; background:#f9fafb; z-index:2; }
+    th,td{ border:1px solid #e5e7eb; padding:4px 6px; text-align:center; }
+    th.timecol{ width:42px; text-align:center; }
+    th.devcol{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    td.off{ color:#991b1b; font-weight:600; background:#fff5f5; }
+    td.miss{ color:#9ca3af; }
+    .devname{ font-weight:600; }
+    .devmeta{ color:#6b7280; font-size:8pt; display:block; }
+    @media print {
+      body{ padding:0; }
+      .report{ box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report">
+    <div class="hdr">
+      <h1>Súhrnný report teplôt – {{ date.strftime('%d.%m.%Y') }}</h1>
+      <div class="meta">Rozsah: 00:00 – {{ range_end_label or '23:59' }} (15-min intervaly)</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th class="timecol">Čas</th>
+          {% for d in headers %}
+            <th class="devcol">
+              <span class="devname">{{ d.name }}</span>
+              <span class="devmeta">{{ d.code }} · {{ d.location }} ·
+                {% if d.device_type=='CHLAD' %}Chladiaci{% elif d.device_type=='MRAZ' %}Mraziaci{% else %}Rozrábka{% endif %}
+              </span>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in slots %}
+          <tr>
+            <td class="timecol">{{ s.strftime('%H:%M') }}</td>
+            {% for d in headers %}
+              {% set cell = cells[s][d.id] %}
+              {% if cell.status == 'OK' %}
+                <td>{{ '%.1f'|format(cell.temp) }}</td>
+              {% elif cell.status == 'OFF' %}
+                <td class="off">OFF</td>
+              {% else %}
+                <td class="miss">—</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

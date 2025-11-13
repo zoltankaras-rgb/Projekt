@@ -1,0 +1,35 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "Skuska",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421905411165"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32944485",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50756542,
+            "phonenr": "+421905411165"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

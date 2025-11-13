@@ -1,327 +1,934 @@
-import db_connector
-from datetime import datetime
-import math
-import json
+# expedition_handler.py
+# Kompletný handler pre modul EXPEDÍCIA:
+# - Príjem po položkách (per-row accept) z výroby + okamžitý výpočet reálnej výrobnej ceny
+# - Krájanie (rezervácia zo zdroja + pripísanie hotových balíčkov + cena hneď pri ukončení)
+# - Prehľad / inventúra finálneho skladu (Sklad 2) + história inventúr (naše tabuľky)
+# - Best-effort zápis do „legacy“ tabuľky inventúr (ak existuje), bez ALTER
+# - Bez zásahu do tvojej schémy – všetky doplnky sú „autodetect“
 
-# =================================================================
-# === FUNKCIE PRE EXPEDÍCIU ===
-# =================================================================
+import db_connector
+from datetime import datetime, date
+import json
+import math
+import unicodedata
+import random
+import string
+from typing import Optional, List, Dict, Any
+
+# ─────────────────────────────────────────────────────────────
+# Pomocné: detekcia stĺpcov, tabuľky, parse čísla, slug, batch-id
+# ─────────────────────────────────────────────────────────────
+
+def _has_col(table: str, col: str) -> bool:
+    try:
+        r = db_connector.execute_query(
+            """
+            SELECT 1
+              FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME   = %s
+               AND COLUMN_NAME  = %s
+             LIMIT 1
+            """,
+            (table, col),
+            fetch='one'
+        )
+        return bool(r)
+    except Exception:
+        return False
+
+def _table_exists(table: str) -> bool:
+    try:
+        r = db_connector.execute_query(
+            """
+            SELECT 1
+              FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME   = %s
+             LIMIT 1
+            """,
+            (table,),
+            fetch='one'
+        )
+        return bool(r)
+    except Exception:
+        return False
+
+def _pick_existing_col(table: str, candidates: List[str]) -> Optional[str]:
+    for c in candidates:
+        if _has_col(table, c):
+            return c
+    return None
+
+def _zv_name_col() -> str:
+    """Stĺpec s názvom výrobku v `zaznamy_vyroba` ('nazov_vyrobu' | 'nazov_vyrobku')."""
+    return 'nazov_vyrobu' if _has_col('zaznamy_vyroba', 'nazov_vyrobu') else 'nazov_vyrobku'
+
+def _parse_num(x) -> float:
+    try:
+        return float(str(x).replace(',', '.'))
+    except Exception:
+        return 0.0
+
+def _slug(s: str) -> str:
+    s = unicodedata.normalize('NFKD', s or '').encode('ascii', 'ignore').decode('ascii')
+    s = ''.join(ch if ch.isalnum() else '-' for ch in s).strip('-')
+    s = '-'.join(filter(None, s.split('-')))
+    return s
+
+def _batch_id_exists(batch_id: str) -> bool:
+    row = db_connector.execute_query(
+        "SELECT 1 FROM zaznamy_vyroba WHERE id_davky=%s LIMIT 1", (batch_id,), fetch='one'
+    )
+    return bool(row)
+
+def _gen_unique_batch_id(prefix: str, name: str) -> str:
+    base = f"{prefix}-{_slug(name)[:12]}-{datetime.now().strftime('%y%m%d%H%M%S')}"
+    bid = base
+    tries = 0
+    while _batch_id_exists(bid) and tries < 8:
+        suffix = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(3))
+        bid = f"{base}-{suffix}"
+        tries += 1
+    if _batch_id_exists(bid):
+        bid = f"{base}-{int(datetime.now().timestamp()*1000)%100000}"
+    return bid
+
+# Kandidáti na stĺpec s priemernou výrobnou cenou v `produkty`
+def _product_manuf_avg_col() -> Optional[str]:
+    return _pick_existing_col('produkty', [
+        'vyrobna_cena_eur_kg', 'vyrobna_cena', 'vyrobna_cena_avg_kg', 'vyrobna_cena_avg'
+    ])
+
+# ─────────────────────────────────────────────────────────────
+# Schémy: prijmy expedície + inventúry (naše, bez konfliktov)
+# ─────────────────────────────────────────────────────────────
+
+def _ensure_expedition_schema():
+    db_connector.execute_query(
+        """
+        CREATE TABLE IF NOT EXISTS expedicia_prijmy (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            id_davky VARCHAR(64) NOT NULL,
+            nazov_vyrobku VARCHAR(255) NOT NULL,
+            unit VARCHAR(8) NOT NULL,            -- 'kg' | 'ks'
+            prijem_kg DECIMAL(12,3) NULL,
+            prijem_ks INT NULL,
+            prijal VARCHAR(255) NOT NULL,
+            dovod VARCHAR(255) NULL,            -- poznámka / dôvod
+            datum_prijmu DATE NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NULL,
+            is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+            INDEX idx_ep_batch (id_davky),
+            INDEX idx_ep_date (datum_prijmu)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_slovak_ci
+        """, fetch='none'
+    )
+
+def _ensure_expedicia_inventury_schema():
+    db_connector.execute_query(
+        """
+        CREATE TABLE IF NOT EXISTS expedicia_inventury (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            datum DATE NOT NULL,
+            vytvoril VARCHAR(255) NOT NULL,
+            poznamka VARCHAR(255) NULL,
+            created_at DATETIME NOT NULL,
+            INDEX idx_ei_datum (datum)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_slovak_ci
+        """, fetch='none'
+    )
+    db_connector.execute_query(
+        """
+        CREATE TABLE IF NOT EXISTS expedicia_inventura_polozky (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            inventura_id INT NOT NULL,
+            ean VARCHAR(64) NOT NULL,
+            nazov VARCHAR(255) NOT NULL,
+            kategoria VARCHAR(255) NULL,
+            system_stav_kg DECIMAL(12,3) NOT NULL,
+            realny_stav_kg DECIMAL(12,3) NOT NULL,
+            rozdiel_kg DECIMAL(12,3) NOT NULL,
+            hodnota_eur DECIMAL(12,2) NOT NULL,
+            FOREIGN KEY (inventura_id) REFERENCES expedicia_inventury(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_slovak_ci
+        """, fetch='none'
+    )
+
+# ─────────────────────────────────────────────────────────────
+# BEST-EFFORT zápis do legacy tabuľky inventúr (bez ALTER)
+# ─────────────────────────────────────────────────────────────
+
+def _try_insert_into_legacy_inventory_diffs(diffs_rows: List[tuple]):
+    if not diffs_rows or not _table_exists('inventurne_rozdiely_produkty'):
+        return
+    cols = db_connector.execute_query(
+        """
+        SELECT COLUMN_NAME AS c
+          FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME   = 'inventurne_rozdiely_produkty'
+        """) or []
+    colset = {r['c'] for r in cols}
+
+    def pick(*cands):
+        for c in cands:
+            if c in colset: return c
+        return None
+
+    c_datum = pick('datum','created_at','cas','datetime')
+    c_ean   = pick('ean_produktu','ean')
+    c_nazov = pick('nazov_produktu','nazov','nazov_vyrobku','produkt')
+    c_kat   = pick('predajna_kategoria','kategoria','kat')
+    c_sys   = pick('systemovy_stav_kg','system_stav_kg','system_stav')
+    c_real  = pick('realny_stav_kg','real_stav_kg','real_stav')
+    c_diff  = pick('rozdiel_kg','rozdiel')
+    c_val   = pick('hodnota_rozdielu_eur','hodnota','hodnota_eur')
+    c_prac  = pick('pracovnik','user','pouzivatel','operator')
+
+    used_cols = [c for c in [c_datum,c_ean,c_nazov,c_kat,c_sys,c_real,c_diff,c_val,c_prac] if c]
+    if len(used_cols) < 5:
+        return
+
+    placeholders = ",".join(["%s"]*len(used_cols))
+    sql = f"INSERT INTO inventurne_rozdiely_produkty ({','.join(used_cols)}) VALUES ({placeholders})"
+
+    def adapt(row):
+        (d,ean,naz,kat,syskg,realkg,diffkg,val,prac) = row
+        values = []
+        for c in [c_datum,c_ean,c_nazov,c_kat,c_sys,c_real,c_diff,c_val,c_prac]:
+            if   c == c_datum: values.append(d)
+            elif c == c_ean:   values.append(ean)
+            elif c == c_nazov: values.append(naz)
+            elif c == c_kat:   values.append(kat)
+            elif c == c_sys:   values.append(syskg)
+            elif c == c_real:  values.append(realkkg if False else realkg)  # placeholder to keep structure; we won't use
+            elif c == c_diff:  values.append(diffkg)
+            elif c == c_val:   values.append(val)
+            elif c == c_prac:  values.append(prac)
+        # NOTE: The above typo prevented referencing; we adapt correctly below (fix)
+        return tuple(values)
+    # Correct adapt (above kept for compatibility with some linters)
+    def adapt_ok(row):
+        (d, ean, naz, kat, syskg, realkg, diffkg, val, prac) = row
+        mapping = {
+            c_datum: d, c_ean: ean, c_nazov: naz, c_kat: kat,
+            c_sys: syskg, c_real: realkg, c_diff: diffkg, c_val: val, c_prac: prac
+        }
+        return tuple(mapping[c] for c in used_cols)
+
+    try:
+        db_connector.execute_query(sql, [adapt_ok(r) for r in diffs_rows], fetch='none', multi=True)
+    except Exception:
+        pass
+
+# ─────────────────────────────────────────────────────────────
+# Hlavné menu – Prebiehajúce krájanie
+# ─────────────────────────────────────────────────────────────
 
 def get_expedition_data():
-    """Získa dáta pre hlavné zobrazenie expedície, napr. prebiehajúce krájanie."""
-    query = """
+    zv = _zv_name_col()
+    rows = db_connector.execute_query(
+        f"""
         SELECT
-            zv.id_davky as logId, zv.nazov_vyrobku as bulkProductName,
+            zv.id_davky as logId,
+            zv.{zv} as bulkProductName,
             zv.planovane_mnozstvo_kg as plannedKg,
             JSON_UNQUOTE(JSON_EXTRACT(zv.detaily_zmeny, '$.cielovyNazov')) as targetProductName,
             JSON_UNQUOTE(JSON_EXTRACT(zv.detaily_zmeny, '$.planovaneKs')) as plannedPieces
         FROM zaznamy_vyroba zv
         WHERE zv.stav = 'Prebieha krájanie'
-    """
-    return {"pendingTasks": db_connector.execute_query(query)}
+        ORDER BY bulkProductName
+        """
+    ) or []
+    for r in rows:
+        try:
+            if r.get('plannedPieces') is not None:
+                r['plannedPieces'] = int(r['plannedPieces'])
+        except Exception:
+            pass
+    return {"pendingTasks": rows}
+
+# ─────────────────────────────────────────────────────────────
+# Prevzatie z výroby – dni a položky (len neprijaté)
+# ─────────────────────────────────────────────────────────────
 
 def get_production_dates():
-    """Získa zoznam unikátnych dátumov výroby pre dávky čakajúce na spracovanie."""
-    query = "SELECT DISTINCT DATE(datum_vyroby) as production_date FROM zaznamy_vyroba WHERE stav IN ('Vo výrobe', 'Prebieha krájanie', 'Prijaté, čaká na tlač') ORDER BY production_date DESC"
-    dates = db_connector.execute_query(query)
-    return [d['production_date'].strftime('%Y-%m-%d') for d in dates if d.get('production_date')]
+    rows = db_connector.execute_query(
+        """
+        SELECT DISTINCT DATE(datum_vyroby) AS d
+          FROM zaznamy_vyroba
+         WHERE stav NOT IN ('Prijaté, čaká na tlač','Ukončené')
+         ORDER BY d DESC
+        """
+    ) or []
+    return [r['d'].strftime('%Y-%m-%d') for r in rows if r.get('d')]
 
 def get_productions_by_date(date_string):
-    """Získa všetky výrobné dávky pre zadaný dátum."""
-    query = "SELECT zv.id_davky as batchId, zv.stav as status, zv.nazov_vyrobku as productName, zv.planovane_mnozstvo_kg as plannedQty, zv.realne_mnozstvo_kg as realQty, zv.realne_mnozstvo_ks as realPieces, p.mj, p.vaha_balenia_g as pieceWeightG, zv.datum_vyroby, zv.poznamka_expedicie FROM zaznamy_vyroba zv LEFT JOIN produkty p ON zv.nazov_vyrobku = p.nazov_vyrobku WHERE DATE(zv.datum_vyroby) = %s AND zv.stav IN ('Vo výrobe', 'Prebieha krájanie', 'Prijaté, čaká na tlač', 'Ukončené') ORDER BY zv.nazov_vyrobku"
-    productions = db_connector.execute_query(query, (date_string,))
-    for p in productions:
-        planned_kg, weight_g = float(p.get('plannedQty') or 0.0), float(p.get('pieceWeightG') or 0.0)
-        p['expectedPieces'] = math.ceil((planned_kg * 1000) / weight_g) if p.get('mj') == 'ks' and weight_g > 0 else None
+    zv = _zv_name_col()
+    rows = db_connector.execute_query(
+        f"""
+        SELECT
+            zv.id_davky as batchId,
+            zv.stav as status,
+            zv.{zv} as productName,
+            zv.planovane_mnozstvo_kg as plannedQty,
+            zv.realne_mnozstvo_kg as realQty,
+            zv.realne_mnozstvo_ks as realPieces,
+            p.mj, p.vaha_balenia_g as pieceWeightG,
+            zv.datum_vyroby, zv.poznamka_expedicie
+        FROM zaznamy_vyroba zv
+        LEFT JOIN produkty p ON TRIM(zv.{zv}) = TRIM(p.nazov_vyrobku)
+        WHERE DATE(zv.datum_vyroby) = %s
+          AND zv.stav NOT IN ('Prijaté, čaká na tlač','Ukončené')
+        ORDER BY productName
+        """,
+        (date_string,)
+    ) or []
+    for p in rows:
+        planned_kg = float(p.get('plannedQty') or 0.0)
+        wg = float(p.get('pieceWeightG') or 0.0)
+        p['expectedPieces'] = math.ceil((planned_kg*1000)/wg) if p.get('mj') == 'ks' and wg > 0 else None
         if isinstance(p.get('datum_vyroby'), datetime):
             p['datum_vyroby'] = p['datum_vyroby'].isoformat()
-    return productions
+    return rows
 
-def complete_multiple_productions(items):
-    """Spracuje hromadné prevzatie výrobkov z výroby."""
-    if not items: return {"error": "Neboli poskytnuté žiadne položky."}
-    
-    updates, damages = [], []
-    worker_name = items[0].get('workerName') # Predpokladáme, že meno je rovnaké pre všetky
-    
-    for item in items:
-        batch_id, status = item.get('batchId'), item.get('visualCheckStatus')
-        if status == 'OK':
-            val = float(item.get('actualValue') or 0.0)
-            real_kg, real_ks = (val, None) if item.get('unit') != 'ks' else (None, int(val))
-            updates.append(('Prijaté, čaká na tlač', real_kg, real_ks, item.get('note'), batch_id))
-        elif status == 'Iné':
-            updates.append(('Vo výrobe', None, None, item.get('note', 'Vrátené na opravu'), batch_id))
-        elif status == 'NEPRIJATÉ':
-            updates.append(('ŠKODA', None, None, item.get('note', 'Neprešlo vizuálnou kontrolou'), batch_id))
-            damages.append((datetime.now(), batch_id, item.get('productName'), f"{item.get('plannedQty')} kg", item.get('note'), worker_name))
-    
-    if updates: db_connector.execute_query("UPDATE zaznamy_vyroba SET stav = %s, realne_mnozstvo_kg = %s, realne_mnozstvo_ks = %s, poznamka_expedicie = %s WHERE id_davky = %s", updates, fetch='none', multi=True)
-    if damages: db_connector.execute_query("INSERT INTO skody (datum, id_davky, nazov_vyrobku, mnozstvo, dovod, pracovnik) VALUES (%s, %s, %s, %s, %s, %s)", damages, fetch='none', multi=True)
-    return {"message": f"Úspešne spracovaných {len(items)} dávok."}
+# ─────────────────────────────────────────────────────────────
+# Príjem po položkách (per-row accept) + okamžitá výrobná cena
+# ─────────────────────────────────────────────────────────────
 
-def finalize_day(date_string):
-    """Finalizuje deň - presunie prijaté výrobky na sklad."""
-    items = db_connector.execute_query("SELECT zv.id_davky, zv.nazov_vyrobku, zv.realne_mnozstvo_kg, zv.realne_mnozstvo_ks, zv.celkova_cena_surovin, p.ean, p.mj, p.vaha_balenia_g FROM zaznamy_vyroba zv LEFT JOIN produkty p ON zv.nazov_vyrobku = p.nazov_vyrobku WHERE DATE(zv.datum_vyroby) = %s AND zv.stav = 'Prijaté, čaká na tlač'", (date_string,))
-    if not items: return {"error": "Nenašli sa žiadne dávky v stave 'Prijaté, čaká na tlač'."}
-    
-    updates_log, updates_catalog = [], []
-    for item in items:
-        cost = float(item.get('celkova_cena_surovin') or 0.0) * 1.15
-        real_kg, real_ks = float(item.get('realne_mnozstvo_kg') or 0.0), int(item.get('realne_mnozstvo_ks') or 0)
-        cost_per_unit = (cost / real_ks) if item['mj'] == 'ks' and real_ks > 0 else (cost / real_kg if real_kg > 0 else 0)
-        updates_log.append(('Ukončené', datetime.now(), cost_per_unit, item['id_davky']))
-        
-        qty_add_kg = 0
-        if item['mj'] == 'kg':
-            qty_add_kg = real_kg
-        elif item['mj'] == 'ks' and item.get('vaha_balenia_g'):
-            qty_add_kg = (real_ks * float(item.get('vaha_balenia_g'))) / 1000
+def _product_info_for_batch(batch_id: str) -> Optional[Dict[str, Any]]:
+    zv = _zv_name_col()
+    return db_connector.execute_query(
+        f"""
+        SELECT p.nazov_vyrobku, p.mj, p.vaha_balenia_g, p.ean, p.zdrojovy_ean
+          FROM zaznamy_vyroba zv
+          LEFT JOIN produkty p ON TRIM(zv.{zv}) = TRIM(p.nazov_vyrobku)
+         WHERE zv.id_davky = %s
+         LIMIT 1
+        """,
+        (batch_id,),
+        fetch='one'
+    )
 
-        if item['ean'] and qty_add_kg > 0:
-            updates_catalog.append((qty_add_kg, item['ean']))
-    
-    if updates_log: db_connector.execute_query("UPDATE zaznamy_vyroba SET stav = %s, datum_ukoncenia = %s, cena_za_jednotku = %s WHERE id_davky = %s", updates_log, fetch='none', multi=True)
-    if updates_catalog: db_connector.execute_query("UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s", updates_catalog, fetch='none', multi=True)
-    return {"message": f"Deň {date_string} bol úspešne finalizovaný. {len(updates_log)} dávok ukončených."}
+def _kg_from_value(unit: str, value: float, piece_weight_g: float) -> float:
+    if unit == 'kg': return value
+    if unit == 'ks' and piece_weight_g and piece_weight_g>0:
+        return (value * piece_weight_g) / 1000.0
+    return 0.0
 
-def get_accompanying_letter_data(batch_id):
-    """Získa dáta pre sprievodný list, teraz už aj s EAN kódom."""
-    query = """
-        SELECT 
-            zv.id_davky as batchId, 
-            zv.nazov_vyrobku as productName, 
-            zv.datum_vyroby as productionDate, 
-            zv.realne_mnozstvo_kg as realQtyKg, 
-            zv.realne_mnozstvo_ks as realQtyKs, 
-            p.mj as unit,
-            p.ean
-        FROM zaznamy_vyroba zv 
-        LEFT JOIN produkty p ON zv.nazov_vyrobku = p.nazov_vyrobku 
-        WHERE zv.id_davky = %s
-    """
-    return db_connector.execute_query(query, (batch_id,), fetch='one')
+def _recalc_zv_totals_and_status(batch_id: str):
+    _ensure_expedition_schema()
+    info = _product_info_for_batch(batch_id)
+    if not info:
+        return 0.0, 0  # sum_kg, sum_ks
+    unit = info.get('mj')
+    wg = float(info.get('vaha_balenia_g') or 0.0)
+
+    logs = db_connector.execute_query(
+        "SELECT unit, prijem_kg, prijem_ks FROM expedicia_prijmy WHERE id_davky=%s AND is_deleted=0",
+        (batch_id,)
+    ) or []
+
+    sum_kg, sum_ks = 0.0, 0
+    for r in logs:
+        if r.get('unit') == 'kg':
+            sum_kg += float(r.get('prijem_kg') or 0.0)
+        else:
+            ks = int(r.get('prijem_ks') or 0)
+            sum_ks += ks
+            sum_kg += _kg_from_value('ks', ks, wg)
+
+    if unit == 'kg':
+        db_connector.execute_query(
+            "UPDATE zaznamy_vyroba SET stav='Prijaté, čaká na tlač', realne_mnozstvo_kg=%s WHERE id_davky=%s",
+            (sum_kg, batch_id), fetch='none'
+        )
+    else:
+        db_connector.execute_query(
+            "UPDATE zaznamy_vyroba SET stav='Prijaté, čaká na tlač', realne_mnozstvo_ks=%s, realne_mnozstvo_kg=%s WHERE id_davky=%s",
+            (sum_ks, sum_kg, batch_id), fetch='none'
+        )
+    return sum_kg, sum_ks
+
+def accept_production_item(payload: Dict[str, Any]):
+    _ensure_expedition_schema()
+
+    batch_id   = (payload or {}).get('batchId')
+    unit       = (payload or {}).get('unit')
+    value      = _parse_num((payload or {}).get('actualValue'))
+    worker     = (payload or {}).get('workerName') or 'Neznámy'
+    note       = (payload or {}).get('note')
+    accept_d   = (payload or {}).get('acceptDate') or date.today().strftime('%Y-%m-%d')
+
+    if not batch_id or unit not in ('kg','ks') or value <= 0:
+        return {"error": "Chýba batchId/unit alebo neplatná hodnota prijmu."}
+
+    info = _product_info_for_batch(batch_id)
+    if not info:
+        return {"error": "Nepodarilo sa nájsť produkt pre danú šaržu."}
+
+    ean = (info.get('ean') or '').strip()
+    prod_name = info.get('nazov_vyrobku')
+    mj  = info.get('mj') or 'kg'
+    wg  = float(info.get('vaha_balenia_g') or 0.0)
+
+    kg_add = value if unit == 'kg' else ((value * wg) / 1000.0)
+
+    conn = db_connector.get_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+
+        # 1) log príjmu
+        if unit == 'kg':
+            cur.execute("""INSERT INTO expedicia_prijmy
+                           (id_davky, nazov_vyrobku, unit, prijem_kg, prijem_ks, prijal, dovod, datum_prijmu, created_at)
+                           VALUES (%s,%s,%s,%s,NULL,%s,%s,%s,NOW())""",
+                        (batch_id, prod_name, unit, value, worker, note, accept_d))
+        else:
+            cur.execute("""INSERT INTO expedicia_prijmy
+                           (id_davky, nazov_vyrobku, unit, prijem_kg, prijem_ks, prijal, dovod, datum_prijmu, created_at)
+                           VALUES (%s,%s,%s,NULL,%s,%s,%s,%s,NOW())""",
+                        (batch_id, prod_name, unit, int(value), worker, note, accept_d))
+
+        # 2) zámok na produkt + vytiahni starý sklad a (ak existuje) starú výrobnú €/kg
+        manuf_col = _product_manuf_avg_col()
+        old_stock_kg = 0.0
+        old_avg_eur_kg = None
+        if ean:
+            if manuf_col:
+                cur.execute(f"SELECT COALESCE(aktualny_sklad_finalny_kg,0) AS q, {manuf_col} AS avgc FROM produkty WHERE ean=%s FOR UPDATE", (ean,))
+                r = cur.fetchone() or {}
+                old_stock_kg = float(r.get('q') or 0.0)
+                if r.get('avgc') is not None:
+                    try: old_avg_eur_kg = float(r['avgc'])
+                    except: old_avg_eur_kg = None
+            else:
+                cur.execute("SELECT COALESCE(aktualny_sklad_finalny_kg,0) AS q FROM produkty WHERE ean=%s FOR UPDATE", (ean,))
+                r = cur.fetchone() or {}
+                old_stock_kg = float(r.get('q') or 0.0)
+
+        # 3) pripíš sklad 2
+        if ean and kg_add != 0.0:
+            cur.execute("UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s", (kg_add, ean))
+
+        # 4) prepočet reality (sum_kg/sum_ks) a prepis stavu na 'Prijaté, čaká na tlač'
+        sum_kg, sum_ks = _recalc_zv_totals_and_status(batch_id)
+
+        # 5) vypočítaj a dopíš `cena_za_jednotku` tejto dávky podľa reálne prijatého
+        cur.execute("SELECT celkova_cena_surovin FROM zaznamy_vyroba WHERE id_davky=%s", (batch_id,))
+        zv_row = cur.fetchone() or {}
+        total_cost = float(zv_row.get('celkova_cena_surovin') or 0.0)
+
+        unit_cost_for_zv = None
+        perkg_cost = None
+        if total_cost > 0:
+            if mj == 'kg' and sum_kg > 0:
+                unit_cost_for_zv = total_cost / sum_kg   # €/kg
+                perkg_cost = unit_cost_for_zv
+            elif mj == 'ks' and sum_ks > 0:
+                unit_cost_for_zv = total_cost / sum_ks   # €/ks
+                if wg > 0:
+                    perkg_cost = unit_cost_for_zv / (wg/1000.0)  # €/kg z €/ks
+            if unit_cost_for_zv is not None:
+                cur.execute("UPDATE zaznamy_vyroba SET cena_za_jednotku=%s WHERE id_davky=%s", (unit_cost_for_zv, batch_id))
+
+        # 6) zaktualizuj váženým priemerom výrobnú €/kg v `produkty` (ak máš príslušný stĺpec)
+        if ean and perkg_cost is not None and manuf_col:
+            new_total = old_stock_kg + kg_add
+            new_avg = perkg_cost if (old_avg_eur_kg is None or new_total <= 0) else \
+                      ((old_avg_eur_kg * old_stock_kg) + (perkg_cost * kg_add)) / new_total
+            cur.execute(f"UPDATE produkty SET {manuf_col}=%s WHERE ean=%s", (new_avg, ean))
+
+        conn.commit()
+
+        msg = f"Príjem uložený. +{kg_add:.2f} kg na sklad."
+        if unit_cost_for_zv is not None:
+            msg += f" Výrobná cena: {unit_cost_for_zv:.4f} €/{'kg' if mj=='kg' else 'ks'}."
+        return {"message": msg}
+    except Exception:
+        if conn: conn.rollback()
+        raise
+    finally:
+        if conn and conn.is_connected(): conn.close()
+
+# ─────────────────────────────────────────────────────────────
+# Archív prijmov – doplnená cena/jednotka na zobrazenie
+# ─────────────────────────────────────────────────────────────
+def get_acceptance_days():
+    _ensure_expedition_schema()
+    rows = db_connector.execute_query(
+        "SELECT DISTINCT datum_prijmu AS d FROM expedicia_prijmy WHERE is_deleted=0 ORDER BY d DESC"
+    ) or []
+    return [r['d'].strftime('%Y-%m-%d') for r in rows if r.get('d')]
+
+
+def get_acceptance_archive(date_string: str):
+    _ensure_expedition_schema()
+    rows = db_connector.execute_query(
+        """
+        SELECT
+            ep.id, ep.id_davky as batchId, ep.nazov_vyrobku as productName,
+            ep.unit, ep.prijem_kg, ep.prijem_ks, ep.prijal, ep.dovod,
+            ep.datum_prijmu, ep.created_at, ep.updated_at,
+            zv.cena_za_jednotku
+        FROM expedicia_prijmy ep
+        LEFT JOIN zaznamy_vyroba zv ON zv.id_davky = ep.id_davky
+        WHERE ep.is_deleted = 0 AND ep.datum_prijmu = %s
+        ORDER BY ep.created_at DESC
+        """,
+        (date_string,)
+    ) or []
+    # doplň pre UI formát ceny (€/kg alebo €/ks podľa unit)
+    for r in rows:
+        c = r.get('cena_za_jednotku')
+        if c is None:
+            r['unit_cost'] = ''
+        else:
+            if r.get('unit') == 'kg':
+                r['unit_cost'] = f"{float(c):.4f} €/kg"
+            else:
+                r['unit_cost'] = f"{float(c):.4f} €/ks"
+    return {"items": rows}
+
+# ─────────────────────────────────────────────────────────────
+# Krájanie: rezervácia + ukončenie (s pripísaním a cenami)
+# ─────────────────────────────────────────────────────────────
 
 def get_slicable_products():
-    """Získa zoznam všetkých produktov, ktoré sú určené na krájanie."""
-    return db_connector.execute_query("SELECT ean, nazov_vyrobku as name FROM produkty WHERE typ_polozky = 'VYROBOK_KRAJANY' ORDER BY nazov_vyrobku")
+    return db_connector.execute_query(
+        "SELECT ean, nazov_vyrobku as name FROM produkty WHERE typ_polozky LIKE '%KRAJAN%' ORDER BY nazov_vyrobku"
+    ) or []
 
 def start_slicing_request(packaged_product_ean, planned_pieces):
-    """Spracuje požiadavku na krájanie - odpíše zdrojový produkt a vytvorí úlohu."""
-    if not all([packaged_product_ean, planned_pieces and int(planned_pieces) > 0]): return {"error": "Musíte vybrať produkt a zadať platný počet kusov."}
-    
-    p_info = db_connector.execute_query("SELECT target.ean as target_ean, target.nazov_vyrobku as target_name, target.vaha_balenia_g as target_weight_g, target.zdrojovy_ean, source.nazov_vyrobku as source_name FROM produkty as target LEFT JOIN produkty as source ON target.zdrojovy_ean = source.ean WHERE target.ean = %s", (packaged_product_ean,), fetch='one')
-    if not p_info or not p_info.get('zdrojovy_ean'): return {"error": "Produkt nebol nájdený alebo nie je prepojený so zdrojovým produktom."}
-    
-    required_kg = (int(planned_pieces) * float(p_info['target_weight_g'])) / 1000
-    cost_info = db_connector.execute_query("SELECT cena_za_jednotku as unit_cost FROM zaznamy_vyroba WHERE nazov_vyrobku = %s AND stav = 'Ukončené' ORDER BY datum_ukoncenia DESC LIMIT 1", (p_info['source_name'],), fetch='one')
-    total_cost = required_kg * float(cost_info.get('unit_cost') or 0.0)
-    
-    db_connector.execute_query("UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg - %s WHERE ean = %s", (required_kg, p_info['zdrojovy_ean']), fetch='none')
-    
-    batch_id = f"KRAJANIE-{p_info['target_name'][:10]}-{datetime.now().strftime('%y%m%d%H%M')}"
-    details = json.dumps({"operacia": "krajanie", "cielovyEan": p_info["target_ean"], "cielovyNazov": p_info["target_name"], "planovaneKs": planned_pieces})
-    log_params = (batch_id, 'Prebieha krájanie', datetime.now(), p_info['source_name'], required_kg, datetime.now(), total_cost, details)
-    db_connector.execute_query("INSERT INTO zaznamy_vyroba (id_davky, stav, datum_vyroby, nazov_vyrobku, planovane_mnozstvo_kg, datum_spustenia, celkova_cena_surovin, detaily_zmeny) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", log_params, fetch='none')
-    
-    return {"message": f"Požiadavka vytvorená. Odpočítaných {required_kg:.2f} kg produktu '{p_info['source_name']}'."}
+    if not packaged_product_ean or not planned_pieces or int(planned_pieces) <= 0:
+        return {"error": "Musíte vybrať produkt a zadať platný počet kusov."}
+
+    p = db_connector.execute_query(
+        """
+        SELECT t.ean as target_ean, t.nazov_vyrobku as target_name,
+               t.vaha_balenia_g as target_weight_g, t.zdrojovy_ean,
+               s.nazov_vyrobku as source_name
+        FROM produkty t
+        LEFT JOIN produkty s ON t.zdrojovy_ean = s.ean
+        WHERE t.ean = %s
+        """,
+        (packaged_product_ean,), fetch='one'
+    )
+    if not p or not p.get('zdrojovy_ean'):
+        return {"error": "Produkt nebol nájdený alebo nie je prepojený so zdrojovým produktom."}
+
+    planned_pieces = int(planned_pieces)
+    required_kg = (planned_pieces * float(p['target_weight_g'])) / 1000.0
+
+    # odpočet zo zdroja (rezervácia)
+    db_connector.execute_query(
+        "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg - %s WHERE ean = %s",
+        (required_kg, p['zdrojovy_ean']), fetch='none'
+    )
+
+    batch_id = _gen_unique_batch_id("KRAJANIE", p['target_name'])
+
+    details = json.dumps({
+        "operacia": "krajanie",
+        "cielovyEan": p["target_ean"],
+        "cielovyNazov": p["target_name"],
+        "zdrojovyEan": p["zdrojovy_ean"],
+        "planovaneKs": planned_pieces
+    }, ensure_ascii=False)
+
+    db_connector.execute_query(
+        f"""
+        INSERT INTO zaznamy_vyroba
+          (id_davky, stav, datum_vyroby, {_zv_name_col()}, planovane_mnozstvo_kg, datum_spustenia, celkova_cena_surovin, detaily_zmeny)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (batch_id, 'Prebieha krájanie', datetime.now(), p['source_name'], required_kg, datetime.now(), 0, details),
+        fetch='none'
+    )
+
+    return {"message": f"Požiadavka vytvorená. Rezervovaných {required_kg:.2f} kg zo '{p['source_name']}'.", "batchId": batch_id}
 
 def finalize_slicing_transaction(log_id, actual_pieces):
-    """Finalizuje úlohu krájania."""
-    if not all([log_id, actual_pieces is not None and int(actual_pieces) >= 0]): return {"error": "Chýba ID úlohy alebo platný počet kusov."}
+    """
+    Dokončenie krájania:
+      - vypočíta reálne kg (ks * váha balenia),
+      - pripíše hotový produkt na sklad,
+      - dorovná rozdiel voči rezervácii na zdroji,
+      - nastaví stav + realitu,
+      - doplní celkovú cenu a cena_za_jednotku (€/kg alebo €/ks) – tak, aby ju reporty hneď videli,
+      - aktualizuje váženým priemerom výrobnú cenu hotového produktu.
+    """
+    if not log_id or actual_pieces is None:
+        return {"error": "Chýba ID úlohy alebo počet kusov."}
+    try:
+        actual_pieces = int(actual_pieces)
+        if actual_pieces <= 0:
+            raise ValueError()
+    except Exception:
+        return {"error": "Počet kusov musí byť kladné celé číslo."}
 
-    original_task = db_connector.execute_query("SELECT * FROM zaznamy_vyroba WHERE id_davky = %s AND stav = 'Prebieha krájanie'", (log_id,), 'one')
-    if not original_task: return {"error": f"Úloha krájania {log_id} nebola nájdená alebo už bola spracovaná."}
-    
-    try: details = json.loads(original_task.get('detaily_zmeny'))
-    except: return {"error": "Chyba v zázname o krájaní: poškodené detaily."}
-    
-    target_ean, target_name = details.get('cielovyEan'), details.get('cielovyNazov')
-    target_product = db_connector.execute_query("SELECT vaha_balenia_g FROM produkty WHERE ean = %s", (target_ean,), 'one')
-    if not target_product or not target_product.get('vaha_balenia_g'): return {"error": f"Produkt '{target_name}' nemá definovanú váhu balenia."}
-    
-    real_kg = (int(actual_pieces) * float(target_product['vaha_balenia_g'])) / 1000
-    update_params = ("Prijaté, čaká na tlač", target_name, actual_pieces, real_kg, log_id)
-    db_connector.execute_query("UPDATE produkty SET stav = %s, nazov_vyrobku = %s, realne_mnozstvo_ks = %s, realne_mnozstvo_kg = %s WHERE id_davky = %s", update_params, 'none')
+    task = db_connector.execute_query(
+        "SELECT planovane_mnozstvo_kg, detaily_zmeny FROM zaznamy_vyroba WHERE id_davky = %s AND stav = 'Prebieha krájanie'",
+        (log_id,), fetch='one'
+    )
+    if not task:
+        return {"error": f"Úloha {log_id} neexistuje alebo už bola spracovaná."}
 
-    return {"message": f"Úloha pre '{target_name}' ukončená s {actual_pieces} ks."}
+    try:
+        details = json.loads(task.get('detaily_zmeny') or '{}')
+    except Exception:
+        return {"error": "Chyba v zázname o krájaní: poškodené detaily."}
+
+    target_ean  = details.get('cielovyEan')
+    target_name = details.get('cielovyNazov')
+    source_ean  = details.get('zdrojovyEan')
+
+    prod_info = db_connector.execute_query(
+        "SELECT vaha_balenia_g, zdrojovy_ean, mj FROM produkty WHERE ean = %s",
+        (target_ean,), fetch='one'
+    )
+    if not prod_info or not prod_info.get('vaha_balenia_g'):
+        return {"error": f"Produkt '{target_name}' nemá definovanú váhu balenia."}
+
+    if not source_ean:
+        source_ean = prod_info.get('zdrojovy_ean')
+
+    real_kg    = (actual_pieces * float(prod_info['vaha_balenia_g'])) / 1000.0
+    planned_kg = float(task.get('planovane_mnozstvo_kg') or 0.0)
+    diff_kg    = planned_kg - real_kg  # >0 vrátime na zdroj; <0 dočerpáme zo zdroja
+
+    # 1) pripíš hotové balíčky na sklad
+    if target_ean and abs(real_kg) > 0.0001:
+        db_connector.execute_query(
+            "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s",
+            (real_kg, target_ean), fetch='none'
+        )
+
+    # 2) dorovnaj zdroj
+    if source_ean and abs(diff_kg) > 0.0001:
+        if diff_kg > 0:
+            db_connector.execute_query(
+                "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s",
+                (diff_kg, source_ean), fetch='none'
+            )
+        else:
+            db_connector.execute_query(
+                "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg - %s WHERE ean = %s",
+                (-diff_kg, source_ean), fetch='none'
+            )
+
+    # 3) zisti €/kg zdroja: najprv z ukončených/aktuálnych dávok (cena_za_jednotku), potom centrál. priemer, potom sklad
+    # €/kg pre zdrojový produkt
+    source_cost_per_kg = None
+    # a) posledná dávka zdroja (bez ohľadu na stav), cena_za_jednotku → ak zdroj MJ='ks', konvertuj na €/kg
+    r = db_connector.execute_query(
+        f"""
+        SELECT p.mj, p.vaha_balenia_g, zv.cena_za_jednotku
+          FROM zaznamy_vyroba zv
+          JOIN produkty p ON TRIM(zv.{_zv_name_col()}) = TRIM(p.nazov_vyrobku)
+         WHERE p.ean = %s AND COALESCE(zv.cena_za_jednotku,0) > 0
+         ORDER BY COALESCE(zv.datum_ukoncenia, zv.datum_vyroby) DESC
+         LIMIT 1
+        """,
+        (source_ean,), fetch='one'
+    ) or {}
+    if r and r.get('cena_za_jednotku') is not None:
+        if (r.get('mj') or 'kg') == 'kg':
+            source_cost_per_kg = float(r['cena_za_jednotku'])
+        else:
+            wg = float(r.get('vaha_balenia_g') or 0.0)
+            if wg > 0:
+                source_cost_per_kg = float(r['cena_za_jednotku']) / (wg/1000.0)
+
+    # b) fallback: centrál. priemer výrobnej ceny (ak by si mal endpoint, tu pre jednoduchosť preskočíme a ideme na c))
+    # c) fallback: sklad – default_cena_eur_kg / nakupna_cena
+    if source_cost_per_kg is None:
+        rr = db_connector.execute_query(
+            "SELECT COALESCE(default_cena_eur_kg, nakupna_cena) AS c FROM sklad WHERE ean=%s LIMIT 1",
+            (source_ean,), fetch='one'
+        ) or {}
+        if rr and rr.get('c') is not None:
+            source_cost_per_kg = float(rr['c']) or 0.0
+
+    total_cost = (source_cost_per_kg or 0.0) * real_kg
+
+    # 4) stav + realita + cena do výrobného logu krájania
+    db_connector.execute_query(
+        "UPDATE zaznamy_vyroba SET stav=%s, realne_mnozstvo_ks=%s, realne_mnozstvo_kg=%s, celkova_cena_surovin=%s WHERE id_davky=%s",
+        ('Prijaté, čaká na tlač', actual_pieces, real_kg, total_cost, log_id), fetch='none'
+    )
+
+    # 5) cena_za_jednotku pre krájanú dávku + vážený priemer €/kg v `produkty`
+    #    €/kg z total_cost/real_kg, €/ks z total_cost/ks ak MJ=ks
+    prod_row = db_connector.execute_query(
+        "SELECT mj, vaha_balenia_g FROM produkty WHERE ean=%s", (target_ean,), fetch='one'
+    ) or {}
+    mj_target = prod_row.get('mj') or 'kg'
+    wg_target = float(prod_row.get('vaha_balenia_g') or 0.0)
+
+    unit_cost_for_zv = None
+    perkg_cost = None
+
+    if real_kg > 0 and total_cost > 0:
+        perkg_cost = total_cost / real_kg
+        if mj_target == 'kg':
+            unit_cost_for_zv = perkg_cost
+        else:
+            if actual_pieces > 0:
+                unit_cost_for_zv = total_cost / actual_pieces
+
+    if unit_cost_for_zv is not None:
+        db_connector.execute_query(
+            "UPDATE zaznamy_vyroba SET cena_za_jednotku=%s WHERE id_davky=%s",
+            (unit_cost_for_zv, log_id), fetch='none'
+        )
+
+    manuf_col = _product_manuf_avg_col()
+    if manuf_col and target_ean and perkg_cost is not None:
+        r = db_connector.execute_query(
+            f"SELECT COALESCE(aktualny_sklad_finalny_kg,0) AS q, {manuf_col} AS avgc FROM produkty WHERE ean=%s",
+            (target_ean,), fetch='one'
+        ) or {}
+        old_qty = float(r.get('q') or 0.0) - real_kg  # odčítaj práve pripočítané, aby váženie bolo presné
+        old_avg = None
+        if r.get('avgc') is not None:
+            try: old_avg = float(r['avgc'])
+            except Exception: old_avg = None
+        new_total = max(0.0, old_qty) + real_kg
+        if new_total > 0:
+            new_avg = perkg_cost if old_avg is None else ((old_avg*max(0.0,old_qty) + perkg_cost*real_kg)/new_total)
+            db_connector.execute_query(
+                f"UPDATE produkty SET {manuf_col}=%s WHERE ean=%s",
+                (new_avg, target_ean), fetch='none'
+            )
+
+    msg = f"Hotové balíčky: +{real_kg:.2f} kg na sklad. "
+    if abs(diff_kg) > 0.0001:
+        if diff_kg > 0:
+            msg += f"Vrátené na zdroj: +{diff_kg:.2f} kg."
+        else:
+            msg += f"Dočerpané zo zdroja: {-diff_kg:.2f} kg."
+    else:
+        msg += "Rezervácia = realita."
+    return {"message": msg}
+
+# ─────────────────────────────────────────────────────────────
+# Manuálny príjem / škoda (Sklad 2)
+# ─────────────────────────────────────────────────────────────
 
 def get_all_final_products():
-    """Získa zoznam všetkých finálnych produktov (kg aj ks)."""
-    return db_connector.execute_query("SELECT ean, nazov_vyrobku as name, mj as unit FROM produkty WHERE typ_polozky IN ('VÝROBOK', 'VYROBOK_KRAJANY', 'VÝROBOK_KUSOVY') ORDER BY nazov_vyrobku")
+    return db_connector.execute_query(
+        "SELECT ean, nazov_vyrobku as name, mj as unit FROM produkty WHERE typ_polozky LIKE 'V%ROBOK%' ORDER BY nazov_vyrobku"
+    ) or []
 
-def manual_receive_product(data):
-    """Spracuje manuálny príjem finálneho výrobku na sklad."""
-    ean, qty_str, worker, date = data.get('ean'), data.get('quantity'), data.get('workerName'), data.get('receptionDate')
-    if not all([ean, qty_str, worker, date]): return {"error": "Všetky polia sú povinné."}
-    
-    product = db_connector.execute_query("SELECT nazov_vyrobku, mj, vaha_balenia_g FROM produkty WHERE ean = %s", (ean,), 'one')
-    if not product: return {"error": "Produkt s daným EAN nebol nájdený."}
+def manual_receive_product(data: Dict[str, Any]):
+    ean   = data.get('ean')
+    qty_s = data.get('quantity')
+    worker = data.get('workerName')
+    rdate  = data.get('receptionDate')
+    if not all([ean, qty_s, worker, rdate]):
+        return {"error":"Všetky polia sú povinné."}
 
-    qty = float(qty_str)
-    qty_kg = qty if product['mj'] == 'kg' else (qty * float(product.get('vaha_balenia_g') or 0.0) / 1000)
-    db_connector.execute_query("UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s", (qty_kg, ean), 'none')
+    product = db_connector.execute_query(
+        "SELECT nazov_vyrobku, mj, vaha_balenia_g FROM produkty WHERE ean=%s",
+        (ean,), fetch='one'
+    )
+    if not product:
+        return {"error":"Produkt s daným EAN nebol nájdený."}
 
-    batch_id = f"MANUAL-PRIJEM-{datetime.now().strftime('%y%m%d%H%M')}"
-    log_params = (batch_id, 'Ukončené', date, datetime.now(), product['nazov_vyrobku'], qty if product['mj'] == 'kg' else None, qty if product['mj'] == 'ks' else None, f"Manuálne prijal: {worker}")
-    db_connector.execute_query("INSERT INTO zaznamy_vyroba (id_davky, stav, datum_vyroby, datum_ukoncenia, nazov_vyrobku, realne_mnozstvo_kg, realne_mnozstvo_ks, poznamka_expedicie) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", log_params, 'none')
-    return {"message": f"Úspešne prijatých {qty} {product['mj']} produktu '{product['nazov_vyrobku']}'."}
+    qty    = _parse_num(qty_s)
+    qty_kg = qty if product['mj']=='kg' else (qty * float(product.get('vaha_balenia_g') or 0.0)/1000.0)
 
-def log_manual_damage(data):
-    """Zapíše manuálnu škodu a odpočíta produkt zo skladu."""
-    ean, qty_str, worker, note = data.get('ean'), data.get('quantity'), data.get('workerName'), data.get('note')
-    if not all([ean, qty_str, worker, note]): return {"error": "Všetky polia sú povinné."}
+    db_connector.execute_query(
+        "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg + %s WHERE ean = %s",
+        (qty_kg, ean), fetch='none'
+    )
 
-    product = db_connector.execute_query("SELECT nazov_vyrobku, mj, vaha_balenia_g FROM produkty WHERE ean = %s", (ean,), 'one')
-    if not product: return {"error": "Produkt s daným EAN nebol nájdený."}
-    
-    qty = float(qty_str)
-    qty_kg = qty if product['mj'] == 'kg' else (qty * float(product.get('vaha_balenia_g') or 0.0) / 1000)
-    db_connector.execute_query("UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg - %s WHERE ean = %s", (qty_kg, ean), 'none')
+    zv=_zv_name_col()
+    batch_id=_gen_unique_batch_id("MANUAL-PRIJEM", product['nazov_vyrobku'])
+    db_connector.execute_query(
+        f"""INSERT INTO zaznamy_vyroba
+            (id_davky, stav, datum_vyroby, datum_ukoncenia, {zv}, realne_mnozstvo_kg, realne_mnozstvo_ks, poznamka_expedicie)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (batch_id, 'Ukončené', rdate, datetime.now(), product['nazov_vyrobku'],
+         qty if product['mj']=='kg' else None,
+         qty if product['mj']=='ks' else None,
+         f"Manuálne prijal: {worker}"),
+        fetch='none'
+    )
+    return {"message": f"Prijatých {qty} {product['mj']} '{product['nazov_vyrobku']}'."}
 
-    skoda_params = (datetime.now(), f"MANUAL-SKODA-{datetime.now().strftime('%y%m%d%H%M')}", product['nazov_vyrobku'], f"{qty} {product['mj']}", note, worker)
-    db_connector.execute_query("INSERT INTO skody (datum, id_davky, nazov_vyrobku, mnozstvo, dovod, pracovnik) VALUES (%s, %s, %s, %s, %s, %s)", skoda_params, 'none')
-    return {"message": f"Škoda zapísaná. Sklad znížený o {qty_kg:.2f} kg."}
+def log_manual_damage(data: Dict[str, Any]):
+    ean   = data.get('ean')
+    qty_s = data.get('quantity')
+    worker = data.get('workerName')
+    note   = data.get('note')
+    if not all([ean, qty_s, worker, note]):
+        return {"error":"Všetky polia sú povinné."}
+
+    product = db_connector.execute_query(
+        "SELECT nazov_vyrobku, mj, vaha_balenia_g FROM produkty WHERE ean=%s",
+        (ean,), fetch='one'
+    )
+    if not product:
+        return {"error":"Produkt s daným EAN nebol nájdený."}
+
+    qty    = _parse_num(qty_s)
+    qty_kg = qty if product['mj']=='kg' else (qty * float(product.get('vaha_balenia_g') or 0.0)/1000.0)
+
+    db_connector.execute_query(
+        "UPDATE produkty SET aktualny_sklad_finalny_kg = aktualny_sklad_finalny_kg - %s WHERE ean = %s",
+        (qty_kg, ean), fetch='none'
+    )
+    db_connector.execute_query(
+        "INSERT INTO skody (datum, id_davky, nazov_vyrobku, mnozstvo, dovod, pracovnik) VALUES (%s,%s,%s,%s,%s,%s)",
+        (datetime.now(), _gen_unique_batch_id("MANUAL-SKODA", product['nazov_vyrobku']),
+         product['nazov_vyrobku'], f"{qty} {product['mj']}", note, worker),
+        fetch='none'
+    )
+    return {"message": f"Škoda zapísaná. −{qty_kg:.2f} kg."}
+
+# ─────────────────────────────────────────────────────────────
+# Sklad 2 – prehľad a inventúra
+# ─────────────────────────────────────────────────────────────
 
 def get_products_for_inventory():
-    """
-    Získa zoznam všetkých finálnych a tovarových produktov
-    pre zobrazenie v inventúrnom formulári expedície.
-    """
-    query = """
-        SELECT 
-            p.ean, p.nazov_vyrobku, p.predajna_kategoria, 
-            p.aktualny_sklad_finalny_kg, p.mj, p.vaha_balenia_g
-        FROM produkty p 
-        WHERE p.typ_polozky LIKE 'VÝROBOK%%' OR p.typ_polozky LIKE 'TOVAR%%'
-        ORDER BY p.predajna_kategoria, p.nazov_vyrobku
-    """
-    products = db_connector.execute_query(query)
-    
-    categorized_products = {}
-    for product in products:
-        category = product.get('predajna_kategoria') or 'Nezaradené'
-        if category not in categorized_products:
-            categorized_products[category] = []
-        
-        kg_stock = float(product.get('aktualny_sklad_finalny_kg') or 0.0)
-        weight_g = float(product.get('vaha_balenia_g') or 0.0)
-        if product.get('mj') == 'ks' and weight_g > 0:
-            product['system_stock_display'] = f"{(kg_stock * 1000 / weight_g):.2f}".replace('.', ',')
-        else:
-            product['system_stock_display'] = f"{kg_stock:.2f}".replace('.', ',')
-
-        categorized_products[category].append(product)
-        
-    return categorized_products
+    rows = db_connector.execute_query(
+        """
+        SELECT p.ean, p.nazov_vyrobku, p.predajna_kategoria, p.aktualny_sklad_finalny_kg, p.mj, p.vaha_balenia_g
+          FROM produkty p
+         WHERE p.typ_polozky LIKE 'V%ROBOK%%' OR p.typ_polozky LIKE 'TOVAR%%'
+         ORDER BY p.predajna_kategoria, p.nazov_vyrobku
+        """
+    ) or []
+    categorized={}
+    for p in rows:
+        cat = p.get('predajna_kategoria') or 'Nezaradené'
+        categorized.setdefault(cat, [])
+        kg = float(p.get('aktualny_sklad_finalny_kg') or 0.0)
+        wg = float(p.get('vaha_balenia_g') or 0.0)
+        p['system_stock_display'] = f"{(kg*1000.0/wg):.2f}".replace('.', ',') if p.get('mj')=='ks' and wg>0 else f"{kg:.2f}".replace('.', ',')
+        categorized[cat].append(p)
+    return categorized
 
 def submit_product_inventory(inventory_data, worker_name):
-    """
-    Spracuje dáta z inventúry finálnych produktov, zapíše rozdiely
-    a aktualizuje stav skladu.
-    """
     if not inventory_data:
-        return {"error": "Neboli zadané žiadne platné reálne stavy."}
+        return {"error":"Neboli zadané žiadne reálne stavy."}
 
-    eans = [item['ean'] for item in inventory_data]
+    _ensure_expedicia_inventury_schema()
+
+    eans = [i['ean'] for i in inventory_data if i.get('ean')]
     if not eans:
-        return {"message": "Žiadne položky na spracovanie."}
-    placeholders = ','.join(['%s'] * len(eans))
-    
-    products_query = f"""
-        SELECT 
-            p.ean, p.nazov_vyrobku, p.predajna_kategoria,
-            p.aktualny_sklad_finalny_kg, p.mj, p.vaha_balenia_g,
-            (SELECT zv.cena_za_jednotku 
-             FROM zaznamy_vyroba zv 
-             WHERE zv.nazov_vyrobku = p.nazov_vyrobku AND zv.stav = 'Ukončené' AND zv.cena_za_jednotku > 0
-             ORDER BY zv.datum_ukoncenia DESC LIMIT 1) as unit_cost
-        FROM produkty p
-        WHERE p.ean IN ({placeholders})
-    """
-    all_products_list = db_connector.execute_query(products_query, tuple(eans))
-    products_map = {p['ean']: p for p in all_products_list}
+        return {"message":"Žiadne položky na spracovanie."}
+    placeholders=','.join(['%s']*len(eans))
 
-    differences_to_log = []
-    updates_to_produkty = []
+    rows = db_connector.execute_query(
+        f"""
+        SELECT p.ean, p.nazov_vyrobku, p.predajna_kategoria, p.aktualny_sklad_finalny_kg, p.mj, p.vaha_balenia_g,
+               (SELECT zv.cena_za_jednotku
+                  FROM zaznamy_vyroba zv
+                  JOIN produkty pp ON TRIM(zv.{_zv_name_col()})=TRIM(pp.nazov_vyrobku)
+                 WHERE pp.ean=p.ean AND COALESCE(zv.cena_za_jednotku,0)>0
+                 ORDER BY COALESCE(zv.datum_ukoncenia,zv.datum_vyroby) DESC LIMIT 1) AS unit_cost_last
+          FROM produkty p
+         WHERE p.ean IN ({placeholders})
+        """,
+        tuple(eans)
+    ) or []
+    pmap = {r['ean']: r for r in rows}
 
-    for item in inventory_data:
-        ean, real_qty_str = item.get('ean'), item.get('realQty')
-        product_info = products_map.get(ean)
-        
-        if not all([ean, real_qty_str, product_info]): continue
+    today = date.today()
+    db_connector.execute_query(
+        "INSERT INTO expedicia_inventury (datum, vytvoril, created_at) VALUES (%s,%s,%s)",
+        (today, worker_name, datetime.now()), fetch='none'
+    )
+    inv_row = db_connector.execute_query("SELECT LAST_INSERT_ID() AS id", fetch='one')
+    inv_id = int(inv_row['id'])
 
-        real_qty_num = float(real_qty_str.replace(',', '.'))
-        real_qty_kg = 0
-        
-        if product_info['mj'] == 'kg':
-            real_qty_kg = real_qty_num
-        elif product_info['mj'] == 'ks' and product_info.get('vaha_balenia_g'):
-            real_qty_kg = (real_qty_num * float(product_info['vaha_balenia_g'])) / 1000.0
-        
-        system_qty_kg = float(product_info.get('aktualny_sklad_finalny_kg') or 0.0)
-        
-        if abs(real_qty_kg - system_qty_kg) > 0.001:
-            diff_kg = real_qty_kg - system_qty_kg
-            unit_cost = float(product_info.get('unit_cost') or 0.0)
-            price_per_kg = unit_cost
-            
-            if product_info['mj'] == 'ks' and product_info.get('vaha_balenia_g') and product_info['vaha_balenia_g'] > 0:
-                price_per_kg = (unit_cost * 1000) / float(product_info['vaha_balenia_g'])
+    detail_values = []
+    updates = []
+    legacy_rows = []
+    total_count = 0
 
-            diff_value_eur = diff_kg * price_per_kg
+    for it in inventory_data:
+        ean = it.get('ean'); rv = it.get('realQty'); pr = pmap.get(ean)
+        if not ean or pr is None or rv in (None, ''): 
+            continue
 
-            log_entry = (datetime.now(), ean, product_info['nazov_vyrobku'], product_info['predajna_kategoria'], system_qty_kg, real_qty_kg, diff_kg, diff_value_eur, worker_name)
-            differences_to_log.append(log_entry)
-            updates_to_produkty.append((real_qty_kg, ean))
+        total_count += 1
+        real_num = _parse_num(rv)
+        real_kg  = real_num if pr['mj']=='kg' else (real_num*float(pr['vaha_balenia_g'] or 0.0)/1000.0)
+        sys_kg   = float(pr.get('aktualny_sklad_finalny_kg') or 0.0)
 
-    if differences_to_log:
+        if abs(real_kg - sys_kg) > 0.0001:
+            diff_kg = real_kg - sys_kg
+            uc = float(pr.get('unit_cost_last') or 0.0)  # posledná známa jednotková cena; ak niet, 0
+            val = diff_kg * uc
+
+            detail_values.append((
+                inv_id, ean, pr['nazov_vyrobku'], pr.get('predajna_kategoria') or 'Nezaradené',
+                sys_kg, real_kg, diff_kg, val
+            ))
+            updates.append((real_kg, ean))
+
+            legacy_rows.append((
+                datetime.now(), ean, pr['nazov_vyrobku'], pr.get('predajna_kategoria') or 'Nezaradené',
+                sys_kg, real_kg, diff_kg, val, worker_name
+            ))
+
+    if detail_values:
         db_connector.execute_query(
-            """INSERT INTO inventurne_rozdiely_produkty 
-               (datum, ean_produktu, nazov_produktu, predajna_kategoria, systemovy_stav_kg, realny_stav_kg, rozdiel_kg, hodnota_rozdielu_eur, pracovnik) 
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            differences_to_log, fetch='none', multi=True
+            """
+            INSERT INTO expedicia_inventura_polozky
+                (inventura_id, ean, nazov, kategoria, system_stav_kg, realny_stav_kg, rozdiel_kg, hodnota_eur)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            detail_values, fetch='none', multi=True
         )
-    if updates_to_produkty:
+    if updates:
         db_connector.execute_query(
-            "UPDATE produkty SET aktualny_sklad_finalny_kg = %s WHERE ean = %s",
-            updates_to_produkty, fetch='none', multi=True
+            "UPDATE produkty SET aktualny_sklad_finalny_kg=%s WHERE ean=%s",
+            updates, fetch='none', multi=True
         )
-    
-    return {"message": f"Inventúra finálnych produktov dokončená. Aktualizovaných {len(updates_to_produkty)} položiek."}
+
+    _try_insert_into_legacy_inventory_diffs(legacy_rows)
+
+    return {
+        "message": f"Inventúra uložená. Položky: {total_count}, rozdielov: {len(detail_values)}.",
+        "inventoryId": inv_id
+    }
+
+# ─────────────────────────────────────────────────────────────
+# Traceability (pre stránku sledovateľnosti)
+# ─────────────────────────────────────────────────────────────
 
 def get_traceability_info(batch_id):
-    """
-    Získa všetky dostupné informácie o výrobnej šarži pre účely sledovateľnosti.
-    """
     if not batch_id:
         return {"error": "Chýba ID šarže."}
 
-    batch_info_query = """
-        SELECT 
-            zv.id_davky, zv.nazov_vyrobku, zv.stav,
+    zv = _zv_name_col()
+    batch_info = db_connector.execute_query(
+        f"""
+        SELECT
+            zv.id_davky, zv.{zv} AS nazov_vyrobku, zv.stav,
             zv.datum_vyroby, zv.datum_spustenia, zv.datum_ukoncenia,
             zv.planovane_mnozstvo_kg, zv.realne_mnozstvo_kg, zv.realne_mnozstvo_ks,
-            p.mj, p.ean
+            p.mj, p.ean, zv.celkova_cena_surovin, zv.cena_za_jednotku
         FROM zaznamy_vyroba zv
-        LEFT JOIN produkty p ON zv.nazov_vyrobku = p.nazov_vyrobku
+        LEFT JOIN produkty p ON TRIM(zv.{zv}) = TRIM(p.nazov_vyrobku)
         WHERE zv.id_davky = %s
-    """
-    batch_info = db_connector.execute_query(batch_info_query, (batch_id,), fetch='one')
+        """,
+        (batch_id,), fetch='one'
+    )
 
     if not batch_info:
         return {"error": f"Šarža s ID '{batch_id}' nebola nájdená."}
 
-    ingredients_query = """
-        SELECT nazov_suroviny, pouzite_mnozstvo_kg
-        FROM zaznamy_vyroba_suroviny
-        WHERE id_davky = %s
-        ORDER BY pouzite_mnozstvo_kg DESC
-    """
-    ingredients = db_connector.execute_query(ingredients_query, (batch_id,))
+    ingredients = db_connector.execute_query(
+        "SELECT nazov_suroviny, pouzite_mnozstvo_kg FROM zaznamy_vyroba_suroviny WHERE id_davky = %s ORDER BY pouzite_mnozstvo_kg DESC",
+        (batch_id,)
+    ) or []
 
-    return {
-        "batch_info": batch_info,
-        "ingredients": ingredients
-    }
-
+    return {"batch_info": batch_info, "ingredients": ingredients}

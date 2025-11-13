@@ -1,0 +1,42 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "Akcia do 15.11.2025 na Bravcove plece 3,50€",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421905411165"
+        },
+        {
+          "phonenr": "+421907114726"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32953698",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50775457,
+            "phonenr": "+421905411165"
+          },
+          {
+            "msg_id": 50775458,
+            "phonenr": "+421907114726"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

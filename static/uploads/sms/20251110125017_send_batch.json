@@ -1,0 +1,35 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "MIK: Objednavka B2C-9-20251110124921 je pripravena na vyzdvihnutie. Suma 101.25 EUR. Dakujeme! Po uzavreti pripiseme 101 bodov.",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421907114726"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32968500",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50798916,
+            "phonenr": "+421907114726"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

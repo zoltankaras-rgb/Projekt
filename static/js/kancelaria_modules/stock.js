@@ -1,12 +1,11 @@
 // /static/js/kancelaria_modules/stock.js
 // =====================================
 // Modul SKLAD pre kancelaria.html – inline pohľady (bez modálov)
-// - Suroviny (výrobný sklad) – 1 stĺpec „Sklad (kg)”
+// - Suroviny (výrobný sklad) – 1 stĺpec „Sklad (kg)” + plná editácia karty
 // - Celkový prehľad (predajná kategória) – centrál
-// - Výrobný príjem (viac riadkov; mäso má Zdroj, ostatné Dodávateľa – hore pre celú kartu)
-// - Príjem surovín (skratka na intake view)
+// - Výrobný príjem (viac riadkov; Mäso = Zdroj, ostatné = Dodávateľ)
 // - ➕ Pridať položku do výroby (EAN, názov, počiatočná cena a množstvo)
-// - ➕ Nový dodávateľ (voliteľná agenda; iba ak máš CRUD endpointy)
+// - ➕ Nový dodávateľ (CRUD)
 // =====================================
 ;(function (window, document) {
   'use strict';
@@ -41,81 +40,90 @@
   }
 
   function confirmTwice(msg1, msg2){
-  if (!confirm(msg1)) return false;
-  return confirm(msg2);
-}
-
-// --- NOVÉ: štýly a komponent pre pekné autocomplete okno ---
-function ensureAutocompleteStyles(){
-  if (document.getElementById('ac-styles')) return;
-  const style = el(`<style id="ac-styles">
-  .ac-panel{position:absolute;z-index:9999;background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:260px;overflow:auto;min-width:240px;}
-  .ac-item{padding:.5rem .75rem;cursor:pointer;white-space:nowrap;}
-  .ac-item.active,.ac-item:hover{background:#f3f4f6;}
-  </style>`);
-  document.head.appendChild(style);
-}
-
-function attachAutocomplete(input, items, onPick){
-  ensureAutocompleteStyles();
-  let panel = null;
-  let results = [];
-  let index = -1;
-
-  function close(){ if (panel){ panel.remove(); panel = null; index = -1; } }
-  function position(){
-    if (!panel) return;
-    const r = input.getBoundingClientRect();
-    panel.style.left = (window.scrollX + r.left) + "px";
-    panel.style.top  = (window.scrollY + r.bottom + 4) + "px";
-    panel.style.width= r.width + "px";
+    if (!confirm(msg1)) return false;
+    return confirm(msg2);
   }
-  function open(){
-    if (panel) panel.remove();
-    panel = el(`<div class="ac-panel" role="listbox"></div>`);
-    document.body.appendChild(panel);
-    position();
-    panel.addEventListener('click', (ev)=>{
-      const it = ev.target.closest('.ac-item');
-      if (it){ const i = +it.dataset.i; pick(results[i]); }
+
+  // --- Autocomplete (names) ---
+  function ensureAutocompleteStyles(){
+    if (document.getElementById('ac-styles')) return;
+    const style = el(`<style id="ac-styles">
+      .ac-panel{position:absolute;z-index:9999;background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:260px;overflow:auto;min-width:240px;}
+      .ac-item{padding:.5rem .75rem;cursor:pointer;white-space:nowrap;}
+      .ac-item.active,.ac-item:hover{background:#f3f4f6;}
+    </style>`);
+    document.head.appendChild(style);
+  }
+  function attachAutocomplete(input, items, onPick){
+    ensureAutocompleteStyles();
+    let panel = null, results = [], index = -1;
+    function close(){ if (panel){ panel.remove(); panel = null; index = -1; } }
+    function position(){
+      if (!panel) return;
+      const r = input.getBoundingClientRect();
+      panel.style.left = (window.scrollX + r.left) + "px";
+      panel.style.top  = (window.scrollY + r.bottom + 4) + "px";
+      panel.style.width= r.width + "px";
+    }
+    function open(){
+      if (panel) panel.remove();
+      panel = el(`<div class="ac-panel" role="listbox"></div>`);
+      document.body.appendChild(panel);
+      position();
+      panel.addEventListener('click', (ev)=>{
+        const it = ev.target.closest('.ac-item');
+        if (it){ const i = +it.dataset.i; pick(results[i]); }
+      });
+    }
+    function render(){
+      if (!panel) open();
+      const q = (input.value || '').trim().toLowerCase();
+      results = (items || []).filter(n => n.toLowerCase().includes(q)).slice(0, 200);
+      panel.innerHTML = results.map((n,i)=>`<div class="ac-item" data-i="${i}">${n}</div>`).join("");
+      index = -1;
+    }
+    function highlight(){
+      if (!panel) return;
+      Array.from(panel.children).forEach((ch,i)=> ch.classList.toggle('active', i===index));
+      if (index >= 0){
+        const it = panel.children[index];
+        const top = it.offsetTop, h = panel.clientHeight, st = panel.scrollTop;
+        if (top < st) panel.scrollTop = top;
+        else if (top > st + h - it.offsetHeight) panel.scrollTop = top - h + it.offsetHeight;
+      }
+    }
+    function pick(name){
+      if (typeof name !== 'string') return;
+      input.value = name;
+      if (typeof onPick === 'function') Promise.resolve(onPick(name));
+      close();
+    }
+    input.addEventListener('focus', ()=>{ open(); render(); });
+    input.addEventListener('input', render);
+    window.addEventListener('resize', position);
+    input.addEventListener('keydown', (e)=>{
+      if (!panel) return;
+      if (e.key === 'ArrowDown'){ e.preventDefault(); index = Math.min(index + 1, results.length - 1); highlight(); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); index = Math.max(index - 1, 0); highlight(); }
+      else if (e.key === 'Enter'){ if (index >= 0){ e.preventDefault(); pick(results[index]); } }
+      else if (e.key === 'Escape'){ close(); }
+    });
+    document.addEventListener('click', (e)=>{ if (panel && !panel.contains(e.target) && e.target !== input) close(); });
+  }
+  function attachNumericSanitizer(input, decimals=3){
+    input.addEventListener('wheel', (e)=>{ e.preventDefault(); input.blur(); }, { passive:false });
+    input.addEventListener('input', ()=>{
+      let v = (input.value || '').replace(',', '.');
+      v = v.replace(/[^0-9.]/g, '');
+      const parts = v.split('.');
+      if (parts.length > 2){ v = parts.shift() + '.' + parts.join(''); }
+      if (decimals >= 0 && v.includes('.')){
+        const [a,b] = v.split('.');
+        v = a + '.' + b.slice(0, decimals);
+      }
+      input.value = v;
     });
   }
-  function render(){
-    if (!panel) open();
-    const q = (input.value || '').trim().toLowerCase();
-    results = (items || []).filter(n => n.toLowerCase().includes(q)).slice(0, 200);
-    panel.innerHTML = results.map((n,i)=>`<div class="ac-item" data-i="${i}">${n}</div>`).join("");
-    index = -1;
-  }
-  function highlight(){
-    if (!panel) return;
-    Array.from(panel.children).forEach((ch,i)=> ch.classList.toggle('active', i===index));
-    if (index >= 0){
-      const it = panel.children[index];
-      const top = it.offsetTop, h = panel.clientHeight, st = panel.scrollTop;
-      if (top < st) panel.scrollTop = top;
-      else if (top > st + h - it.offsetHeight) panel.scrollTop = top - h + it.offsetHeight;
-    }
-  }
-  function pick(name){
-    if (typeof name !== 'string') return;
-    input.value = name;
-    if (typeof onPick === 'function') onPick(name);
-    close();
-  }
-
-  input.addEventListener('focus', ()=>{ open(); render(); });
-  input.addEventListener('input', render);
-  window.addEventListener('resize', position);
-  input.addEventListener('keydown', (e)=>{
-    if (!panel) return;
-    if (e.key === 'ArrowDown'){ e.preventDefault(); index = Math.min(index + 1, results.length - 1); highlight(); }
-    else if (e.key === 'ArrowUp'){ e.preventDefault(); index = Math.max(index - 1, 0); highlight(); }
-    else if (e.key === 'Enter'){ if (index >= 0){ e.preventDefault(); pick(results[index]); } }
-    else if (e.key === 'Escape'){ close(); }
-  });
-  document.addEventListener('click', (e)=>{ if (panel && !panel.contains(e.target) && e.target !== input) close(); });
-}
 
   // ------------- shell (header bar) -------------
   function makeShell(){
@@ -126,7 +134,7 @@ function attachAutocomplete(input, items, onPick){
           <button id="btn-stock-raw"    class="btn-secondary"><i class="fa-solid fa-boxes-stacked"></i> Suroviny (výrobný sklad)</button>
           <button id="btn-stock-prods"  class="btn-secondary"><i class="fa-solid fa-layer-group"></i> Celkový prehľad (podľa predajnej kategórie)</button>
           <button id="btn-stock-intake" class="btn-secondary"><i class="fa-solid fa-truck-ramp-box"></i> Výrobný príjem (viac položiek)</button>
-          <button id="btn-stock-intake-short" class="btn-secondary"><i class="fa-solid fa-boxes-packing"></i> Príjem surovín</button>
+          <!-- odstránené: Príjem surovín skratka -->
           <button id="btn-stock-additem" class="btn-secondary"><i class="fa-solid fa-plus"></i> Pridať položku do výrobného skladu</button>
           <button id="btn-stock-suppliers" class="btn-secondary"><i class="fa-solid fa-user-tie"></i> Nový dodávateľ</button>
           <span style="display:flex;gap:.5rem;align-items:center;margin-left:auto;">
@@ -141,7 +149,6 @@ function attachAutocomplete(input, items, onPick){
     qs("#btn-stock-raw", node).addEventListener("click", () => renderRaw(node));
     qs("#btn-stock-prods", node).addEventListener("click", () => renderProducts(node));
     qs("#btn-stock-intake", node).addEventListener("click", () => renderIntake(node));
-    qs("#btn-stock-intake-short", node).addEventListener("click", () => renderIntake(node));
     qs("#btn-stock-additem", node).addEventListener("click", () => renderAddItem(node));
     qs("#btn-stock-suppliers", node).addEventListener("click", () => renderSuppliers(node));
     qs("#btn-stock-refresh", node).addEventListener("click", () => {
@@ -159,295 +166,315 @@ function attachAutocomplete(input, items, onPick){
   function loading(){ return el(`<div class="stat-card"><i class="fa-solid fa-spinner fa-spin"></i> Načítavam…</div>`); }
   function empty(msg="Žiadne dáta"){ return el(`<div class="stat-card">${txt(msg)}</div>`); }
 
-  // ------------- Suroviny (výrobný sklad) -------------
-  // načítaj povolené názvy pre danú kategóriu + (voliteľne) posledné ceny
-async function ensureDatalist(shell, category){
-  const id = 'rm-name-dl';
-  const old = document.getElementById(id); if (old) old.remove();
+  // ---------- Allowed names / prices pre intake ----------
+  async function ensureDatalist(shell, category){
+    const id = 'rm-name-dl';
+    const old = document.getElementById(id); if (old) old.remove();
 
-  shell.__allowedNames = []; shell.__allowedLower = new Set(); shell.__lastPriceMap = new Map();
+    shell.__allowedNames = []; shell.__allowedLower = new Set(); shell.__lastPriceMap = new Map();
 
-  try{
-    let url = "/api/kancelaria/stock/allowed-names";
-    if (category) url += `?category=${encodeURIComponent(category)}`;
-    const resp = await apiRequest(url);
+    try{
+      let url = "/api/kancelaria/stock/allowed-names";
+      if (category) url += `?category=${encodeURIComponent(category)}`;
+      const resp = await apiRequest(url);
 
-    const items = Array.isArray(resp?.items) ? resp.items : [];
-    const names = items.length ? items.map(it => it.name) : (Array.isArray(resp?.names) ? resp.names : []);
+      const items = Array.isArray(resp?.items) ? resp.items : [];
+      const names = items.length ? items.map(it => it.name) : (Array.isArray(resp?.names) ? resp.names : []);
 
-    if (items.length){
-      items.forEach(it => {
-        const key = (it.name || "").trim().toLowerCase();
-        if (key) shell.__lastPriceMap.set(key, (it.last_price != null ? Number(it.last_price) : null));
-      });
-    }
-    shell.__allowedNames = names;
-    shell.__allowedLower = new Set(names.map(n => (n || '').toLowerCase()));
+      if (items.length){
+        items.forEach(it => {
+          const key = (it.name || "").trim().toLowerCase();
+          if (key) shell.__lastPriceMap.set(key, (it.last_price != null ? Number(it.last_price) : null));
+        });
+      }
+      shell.__allowedNames = names;
+      shell.__allowedLower = new Set(names.map(n => (n || '').toLowerCase()));
 
-    const dl = el(`<datalist id="${id}">${names.map(n => `<option value="${n}"></option>`).join("")}</datalist>`);
-    shell.appendChild(dl);
-  }catch(e){ console.error("ensureDatalist:", e); }
-}
-
-
-function ensureAutocompleteStyles(){
-  if (document.getElementById('ac-styles')) return;
-  const style = el(`<style id="ac-styles">
-  .ac-panel{position:absolute;z-index:9999;background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:260px;overflow:auto;min-width:240px;}
-  .ac-item{padding:.5rem .75rem;cursor:pointer;white-space:nowrap;}
-  .ac-item.active,.ac-item:hover{background:#f3f4f6;}
-  </style>`);
-  document.head.appendChild(style);
-}
-
-function attachAutocomplete(input, items, onPick){
-  ensureAutocompleteStyles();
-  let panel = null, results = [], index = -1;
-
-  function close(){ if (panel){ panel.remove(); panel = null; index = -1; } }
-  function position(){
-    if (!panel) return;
-    const r = input.getBoundingClientRect();
-    panel.style.left = (window.scrollX + r.left) + "px";
-    panel.style.top  = (window.scrollY + r.bottom + 4) + "px";
-    panel.style.width= r.width + "px";
+      const dl = el(`<datalist id="${id}">${names.map(n => `<option value="${n}"></option>`).join("")}</datalist>`);
+      shell.appendChild(dl);
+    }catch(e){ console.error("ensureDatalist:", e); }
   }
-  function open(){
-    if (panel) panel.remove();
-    panel = el(`<div class="ac-panel" role="listbox"></div>`);
-    document.body.appendChild(panel);
-    position();
-    panel.addEventListener('click', (ev)=>{
-      const it = ev.target.closest('.ac-item');
-      if (it){ const i = +it.dataset.i; pick(results[i]); }
+  function getAllowedNamesSet(shell){
+    if (shell && shell.__allowedLower instanceof Set && shell.__allowedLower.size){
+      return shell.__allowedLower;
+    }
+    const set = new Set();
+    const dl = document.getElementById('rm-name-dl');
+    if (!dl) return set;
+    Array.from(dl.querySelectorAll('option')).forEach(opt => {
+      const v = (opt.value || '').trim().toLowerCase();
+      if (v) set.add(v);
     });
-  }
-  function render(){
-    if (!panel) open();
-    const q = (input.value || '').trim().toLowerCase();
-    results = (items || []).filter(n => n.toLowerCase().includes(q)).slice(0, 200);
-    panel.innerHTML = results.map((n,i)=>`<div class="ac-item" data-i="${i}">${n}</div>`).join("");
-    index = -1;
-  }
-  function highlight(){
-    if (!panel) return;
-    Array.from(panel.children).forEach((ch,i)=> ch.classList.toggle('active', i===index));
-    if (index >= 0){
-      const it = panel.children[index];
-      const top = it.offsetTop, h = panel.clientHeight, st = panel.scrollTop;
-      if (top < st) panel.scrollTop = top;
-      else if (top > st + h - it.offsetHeight) panel.scrollTop = top - h + it.offsetHeight;
-    }
-  }
-  function pick(name){
-    if (typeof name !== 'string') return;
-    input.value = name;
-    if (typeof onPick === 'function') Promise.resolve(onPick(name));
-    close();
+    return set;
   }
 
-  input.addEventListener('focus', ()=>{ open(); render(); });
-  input.addEventListener('input', render);
-  window.addEventListener('resize', position);
-  input.addEventListener('keydown', (e)=>{
-    if (!panel) return;
-    if (e.key === 'ArrowDown'){ e.preventDefault(); index = Math.min(index + 1, results.length - 1); highlight(); }
-    else if (e.key === 'ArrowUp'){ e.preventDefault(); index = Math.max(index - 1, 0); highlight(); }
-    else if (e.key === 'Enter'){ if (index >= 0){ e.preventDefault(); pick(results[index]); } }
-    else if (e.key === 'Escape'){ close(); }
-  });
-  document.addEventListener('click', (e)=>{ if (panel && !panel.contains(e.target) && e.target !== input) close(); });
-}
-function attachNumericSanitizer(input, decimals=3){
-  // žiadne skrolovanie čísla
-  input.addEventListener('wheel', (e)=>{ e.preventDefault(); input.blur(); }, { passive:false });
+  // ------------- Suroviny (výrobný sklad) -------------
+  async function renderRaw(shell){
+    const body = qs("#stock-body", shell);
+    body.innerHTML = ""; body.appendChild(loading()); body.setAttribute("data-view", "raw");
+    const search = qs("#stock-search", shell);
 
-  input.addEventListener('input', ()=>{
-    let v = (input.value || '').replace(',', '.');
-    // povoliť len čísla a jednu bodku
-    v = v.replace(/[^0-9.]/g, '');
-    const parts = v.split('.');
-    if (parts.length > 2){
-      v = parts.shift() + '.' + parts.join(''); // zlepené ostatné
-    }
-    if (decimals >= 0 && v.includes('.')){
-      const [a,b] = v.split('.');
-      v = a + '.' + b.slice(0, decimals);
-    }
-    input.value = v;
-  });
-}
+    const label = {
+      maso: 'Mäso – výrobný sklad',
+      koreniny: 'Koreniny – výrobný sklad',
+      obal: 'Obaly – výrobný sklad',
+      pomocny_material: 'Pomocný materiál – výrobný sklad',
+      nezaradene: 'Nezaradené – výrobný sklad'
+    };
+    const order = ['maso','koreniny','obal','pomocny_material','nezaradene'];
 
- async function renderRaw(shell){
-  const body = qs("#stock-body", shell);
-  body.innerHTML = ""; body.appendChild(loading()); body.setAttribute("data-view", "raw");
-  const search = qs("#stock-search", shell);
-
-  const label = {
-    maso: 'Mäso – výrobný sklad',
-    koreniny: 'Koreniny – výrobný sklad',
-    obal: 'Obaly – výrobný sklad',
-    pomocny_material: 'Pomocný materiál – výrobný sklad',
-    nezaradene: 'Nezaradené – výrobný sklad'
-  };
-  const order = ['maso','koreniny','obal','pomocny_material','nezaradene'];
-
-  const catOf = (r)=>{
-    const t = String(r.typ || '').toLowerCase();
-    const p = String(r.podtyp || '').toLowerCase();
-    if (t === 'mäso' || t === 'maso' || t === 'meat' || p === 'maso') return 'maso';
-    if (t.startsWith('koren') || p === 'koreniny') return 'koreniny';
-    if (t.startsWith('obal')) return 'obal';
-    if (t.startsWith('pomoc')) return 'pomocny_material';
-    return 'nezaradene';
-  };
-
-  try{
-    // POZOR: tento endpoint musí existovať v office_handler (viď backend nižšie)
-    const res = await apiRequest("/api/kancelaria/getRawMaterialStockOverview");
-    const items = Array.isArray(res?.items) ? res.items : [];
-
-    // datalist pre intake
-    const dlHtml = items.map(r => `<option value="${r.nazov}"></option>`).join("");
-    if (!qs("#rm-name-dl", shell)) shell.appendChild(el(`<datalist id="rm-name-dl">${dlHtml}</datalist>`));
-    else qs("#rm-name-dl", shell).innerHTML = dlHtml;
-
-    body.innerHTML = "";
-    const container = el(`<div></div>`);
-    body.appendChild(container);
-
-    const asGroups = (list)=>{
-      const g = { maso:[], koreniny:[], obal:[], pomocny_material:[], nezaradene:[] };
-      list.forEach(r => g[catOf(r)].push(r));
-      return g;
+    const catOf = (r)=>{
+      const t = String(r.typ || '').toLowerCase();
+      const p = String(r.podtyp || '').toLowerCase();
+      if (t === 'mäso' || t === 'maso' || t === 'meat' || p === 'maso') return 'maso';
+      if (t.startsWith('koren') || p === 'koreniny') return 'koreniny';
+      if (t.startsWith('obal')) return 'obal';
+      if (t.startsWith('pomoc')) return 'pomocny_material';
+      return 'nezaradene';
     };
 
-    const draw = (groups)=>{
-      container.innerHTML = "";
-      order.forEach(cat=>{
-        const rows = groups[cat] || [];
-        if (!rows.length) return;
+    try{
+      const res = await apiRequest("/api/kancelaria/getRawMaterialStockOverview");
+      const items = Array.isArray(res?.items) ? res.items : [];
 
-        const card = el(`<div class="stat-card" style="margin-bottom:1rem;"></div>`);
-        card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">${label[cat]}</h4>`));
-        const wrap = el(`<div class="table-container"></div>`);
-        const table = el(`
-          <table>
-            <thead>
-              <tr><th>Názov</th><th>Typ</th><th>Sklad (kg)</th><th>Akcie</th></tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot class="total-row"><tr><td colspan="3">Súčet</td><td class="js-sum">0.00</td></tr></tfoot>
-          </table>
-        `);
-        const tb = qs("tbody", table);
-        let sum = 0;
+      // datalist pre intake/autocomplete
+      const dlHtml = items.map(r => `<option value="${r.nazov}"></option>`).join("");
+      if (!qs("#rm-name-dl", shell)) shell.appendChild(el(`<datalist id="rm-name-dl">${dlHtml}</datalist>`));
+      else qs("#rm-name-dl", shell).innerHTML = dlHtml;
 
-        rows.forEach(r=>{
-          const qty = r.quantity != null ? r.quantity : (r.mnozstvo != null ? r.mnozstvo : 0);
-          const tr = el(`
-            <tr data-name="${txt(r.nazov)}" data-cat="${cat}">
-              <td class="c-name">${txt(r.nazov)}</td>
-              <td>${label[cat].split(' – ')[0]}</td>
-              <td class="c-qty">${fmt(qty, 3)}</td>
-              <td class="c-actions" style="display:flex;gap:.5rem;align-items:center;">
-                <button class="btn-secondary js-edit" style="margin:0;">Upraviť</button>
-                <button class="btn-danger js-del" style="margin:0;">Zmazať</button>
-              </td>
-            </tr>
+      body.innerHTML = "";
+      const container = el(`<div></div>`);
+      body.appendChild(container);
+
+      const asGroups = (list)=>{
+        const g = { maso:[], koreniny:[], obal:[], pomocny_material:[], nezaradene:[] };
+        list.forEach(r => g[catOf(r)].push(r));
+        return g;
+      };
+
+      const draw = (groups)=>{
+        container.innerHTML = "";
+        order.forEach(cat=>{
+          const rows = groups[cat] || [];
+          if (!rows.length) return;
+
+          const card = el(`<div class="stat-card" style="margin-bottom:1rem;"></div>`);
+          card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">${label[cat]}</h4>`));
+          const wrap = el(`<div class="table-container"></div>`);
+          const table = el(`
+            <table>
+              <thead>
+                <tr><th>Názov</th><th>Typ</th><th>Sklad (kg)</th><th>Akcie</th></tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot class="total-row"><tr><td colspan="3">Súčet</td><td class="js-sum">0.00</td></tr></tfoot>
+            </table>
           `);
-          // Edit handler (inline edit množstva)
-          qs(".js-edit", tr).addEventListener("click", async ()=>{
-            // už v edite? nič
-            if (tr.classList.contains("editing")) return;
-            tr.classList.add("editing");
-            const cQty = qs(".c-qty", tr);
-            const oldQty = parseFloat((cQty.textContent || "0").replace(',', '.')) || 0;
-            cQty.innerHTML = `<input type="number" class="input js-newqty" step="0.001" min="0" value="${oldQty.toFixed(3)}" style="max-width:9rem;">`;
-            const actions = qs(".c-actions", tr);
-            actions.innerHTML = `
-              <button class="btn-success js-save" style="margin:0;">Uložiť</button>
-              <button class="btn-secondary js-cancel" style="margin:0;">Zrušiť</button>
-            `;
+          const tb = qs("tbody", table);
+          let sum = 0;
 
-            qs(".js-cancel", tr).onclick = ()=>{
-              cQty.textContent = oldQty.toFixed(3);
+          rows.forEach(r=>{
+            const qty = r.quantity != null ? r.quantity : (r.mnozstvo != null ? r.mnozstvo : 0);
+            const tr = el(`
+              <tr data-name="${txt(r.nazov)}" data-cat="${cat}">
+                <td class="c-name">${txt(r.nazov)}</td>
+                <td>${label[cat].split(' – ')[0]}</td>
+                <td class="c-qty">${fmt(qty, 3)}</td>
+                <td class="c-actions" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                  <button class="btn-secondary js-editqty" style="margin:0;">Upraviť množstvo</button>
+                  <button class="btn-secondary js-editcard" style="margin:0;">Upraviť kartu</button>
+                  <button class="btn-danger js-del" style="margin:0;">Zmazať</button>
+                </td>
+              </tr>
+            `);
+
+            // Edit množstva (inline)
+            qs(".js-editqty", tr).addEventListener("click", async ()=>{
+              if (tr.classList.contains("editing-qty")) return;
+              tr.classList.add("editing-qty");
+              const cQty = qs(".c-qty", tr);
+              const oldQty = parseFloat((cQty.textContent || "0").replace(',', '.')) || 0;
+              cQty.innerHTML = `<input type="number" class="input js-newqty" step="0.001" min="0" value="${oldQty.toFixed(3)}" style="max-width:9rem;">`;
+              attachNumericSanitizer(qs(".js-newqty", tr), 3);
+              const actions = qs(".c-actions", tr);
+              const oldActions = actions.innerHTML;
               actions.innerHTML = `
-                <button class="btn-secondary js-edit" style="margin:0;">Upraviť</button>
-                <button class="btn-danger js-del" style="margin:0;">Zmazať</button>
+                <button class="btn-success js-save" style="margin:0;">Uložiť</button>
+                <button class="btn-secondary js-cancel" style="margin:0;">Zrušiť</button>
               `;
-              // rebind pôvodných listenerov
-              qs(".js-edit", tr).addEventListener("click", ()=>{ tr.classList.remove("editing"); qs(".js-edit", tr).click(); });
-              qs(".js-del", tr).addEventListener("click", delHandler);
-              tr.classList.remove("editing");
-            };
+              qs(".js-cancel", tr).onclick = ()=>{ cQty.textContent = oldQty.toFixed(3); actions.innerHTML = oldActions; bindRowActions(); tr.classList.remove("editing-qty"); };
+              qs(".js-save", tr).onclick = async ()=>{
+                const newQty = parseFloat(qs(".js-newqty", tr).value || "0");
+                const name = tr.dataset.name;
+                if (isNaN(newQty) || newQty < 0){ alert("Neplatné množstvo."); return; }
+                if (!confirmTwice(`Upraviť množstvo položky „${name}“ na ${newQty.toFixed(3)} kg?`,"Prosím potvrďte ešte raz úpravu množstva.")) return;
+                try{
+                  await apiRequest("/api/kancelaria/stock/updateProductionItemQty", "POST", { name, quantity: newQty });
+                  renderRaw(shell);
+                }catch(e){ alert("Chyba pri ukladaní: " + e.message); }
+              };
 
-            qs(".js-save", tr).onclick = async ()=>{
-              const newQty = parseFloat(qs(".js-newqty", tr).value || "0");
-              const name = tr.dataset.name;
-              if (isNaN(newQty) || newQty < 0){ alert("Neplatné množstvo."); return; }
-
-              if (!confirmTwice(`Upraviť množstvo položky „${name}“ na ${newQty.toFixed(3)} kg?`,
-                                "Prosím potvrďte ešte raz úpravu množstva.")) return;
-
-              try{
-                await apiRequest("/api/kancelaria/stock/updateProductionItemQty", "POST", { name, quantity: newQty });
-                renderRaw(shell);
-              }catch(e){
-                alert("Chyba pri ukladaní: " + e.message);
+              function bindRowActions(){
+                qs(".js-editqty", tr).addEventListener("click", ()=>{ tr.classList.remove("editing-qty"); qs(".js-editqty", tr).click(); });
+                qs(".js-editcard", tr).addEventListener("click", ()=> openEditCard(shell, tr.dataset.name));
+                qs(".js-del", tr).addEventListener("click", delHandler);
               }
-            };
+            });
+
+            // Edit karty (full)
+            qs(".js-editcard", tr).addEventListener("click", ()=> openEditCard(shell, tr.dataset.name));
+
+            // Delete
+            function delHandler(){
+              const name = tr.dataset.name;
+              if (!confirmTwice(`Naozaj chcete zmazať položku „${name}“ z výrobného skladu?`,"Toto je druhé potvrdenie. Naozaj zmazať?")) return;
+              apiRequest("/api/kancelaria/stock/deleteProductionItem", "POST", { name })
+                .then(()=> renderRaw(shell))
+                .catch(e => alert("Chyba pri mazaní: " + e.message));
+            }
+            qs(".js-del", tr).addEventListener("click", delHandler);
+
+            tb.appendChild(tr);
+            sum += qty;
           });
 
-          // Delete handler (dvojité potvrdenie)
-          function delHandler(){
-            const name = tr.dataset.name;
-            if (!confirmTwice(`Naozaj chcete zmazať položku „${name}“ z výrobného skladu?`,
-                              "Toto je druhé potvrdenie. Naozaj zmazať?")) return;
-            apiRequest("/api/kancelaria/stock/deleteProductionItem", "POST", { name })
-              .then(()=> renderRaw(shell))
-              .catch(e => alert("Chyba pri mazaní: " + e.message));
-          }
-          qs(".js-del", tr).addEventListener("click", delHandler);
-
-          tb.appendChild(tr);
-          sum += qty;
+          qs(".js-sum", table).textContent = fmt(sum, 3);
+          wrap.appendChild(table);
+          card.appendChild(wrap);
+          container.appendChild(card);
         });
 
-        qs(".js-sum", table).textContent = fmt(sum, 3);
-        wrap.appendChild(table);
-        card.appendChild(wrap);
-        container.appendChild(card);
-      });
-
-      if (!container.children.length){
-        container.appendChild(empty("Žiadne položky vo výrobnom sklade."));
-      }
-    };
-
-    const allGroups = asGroups(items);
-    draw(allGroups);
-
-    if (search){
-      search._h && search.removeEventListener("input", search._h);
-      search._h = ()=>{
-        const q = (search.value || "").toLowerCase().trim();
-        if (!q) { draw(allGroups); return; }
-        const filtered = items.filter(r=>{
-          const cat = catOf(r);
-          return txt(r.nazov).toLowerCase().includes(q)
-              || txt(r.typ).toLowerCase().includes(q)
-              || label[cat].toLowerCase().includes(q);
-        });
-        draw(asGroups(filtered));
+        if (!container.children.length){
+          container.appendChild(empty("Žiadne položky vo výrobnom sklade."));
+        }
       };
-      search.addEventListener("input", search._h);
+
+      const allGroups = asGroups(items);
+      draw(allGroups);
+
+      if (search){
+        search._h && search.removeEventListener("input", search._h);
+        search._h = ()=>{
+          const q = (search.value || "").toLowerCase().trim();
+          if (!q) { draw(allGroups); return; }
+          const filtered = items.filter(r=>{
+            const cat = catOf(r);
+            return txt(r.nazov).toLowerCase().includes(q)
+                || txt(r.typ).toLowerCase().includes(q)
+                || label[cat].toLowerCase().includes(q);
+          });
+          draw(asGroups(filtered));
+        };
+        search.addEventListener("input", search._h);
+      }
+    }catch(e){
+      console.error(e);
+      body.innerHTML = ""; body.appendChild(empty("Nepodarilo sa načítať výrobný sklad."));
     }
-  }catch(e){
-    console.error(e);
-    body.innerHTML = ""; body.appendChild(empty("Nepodarilo sa načítať výrobný sklad."));
   }
-}
+
+  // ---------- Editačný panel karty ----------
+  async function openEditCard(shell, originalName){
+    const body = qs("#stock-body", shell);
+    body.innerHTML = ""; body.setAttribute("data-view","edit");
+    body.appendChild(el(`<div class="stat-card"><h4 style="margin:0 0 .5rem 0;">Upraviť kartu – ${txt(originalName)}</h4></div>`));
+
+    // načítaj dáta položky + dodávateľov
+    let item = {}, suppliers = [];
+    try {
+      const r = await apiRequest(`/api/kancelaria/stock/item?name=${encodeURIComponent(originalName)}`);
+      item = r?.item || {};
+    } catch(e){}
+    try {
+      const s = await apiRequest(`/api/kancelaria/suppliers`, "GET");
+      suppliers = Array.isArray(s?.items) ? s.items : [];
+    } catch(e){}
+
+    const typOptions = [
+      {key:'',  label:'—'},
+      {key:'maso', label:'Mäso'},
+      {key:'koreniny', label:'Koreniny'},
+      {key:'obal', label:'Obaly - Črevá'},
+      {key:'pomocny_material', label:'Pomocný materiál'}
+    ];
+
+    const form = el(`
+      <div class="stat-card">
+        <div class="form-grid">
+          <div class="form-group"><label>Názov</label><input class="js-name" value="${txt(item.nazov||originalName)}"></div>
+          <div class="form-group"><label>EAN</label><input class="js-ean" value="${txt(item.ean||'')}"></div>
+          <div class="form-group"><label>Jednotka (jednotka/mj)</label><input class="js-mj" value="${txt(item.jednotka||item.mj||'kg')}"></div>
+
+          <div class="form-group"><label>Min. množstvo</label><input class="js-min-mnozstvo" type="number" step="0.001" value="${txt(item.min_mnozstvo||'')}"></div>
+          <div class="form-group"><label>Min. stav (kg)</label><input class="js-min-stav" type="number" step="0.001" value="${txt(item.min_stav_kg||'')}"></div>
+          <div class="form-group"><label>Min. zásoba</label><input class="js-min-zasoba" type="number" step="1" value="${txt(item.min_zasoba||'')}"></div>
+
+          <div class="form-group"><label>Nákupná cena</label><input class="js-nakup" type="number" step="0.001" value="${txt(item.nakupna_cena||'')}"></div>
+          <div class="form-group"><label>Default cena €/kg</label><input class="js-defcena" type="number" step="0.001" value="${txt(item.default_cena_eur_kg||'')}"></div>
+
+          <div class="form-group">
+            <label>Kategória (typ)</label>
+            <select class="js-typ">
+              ${typOptions.map(o=>{
+                const isSel =
+                  (String(item.kategoria||'').toLowerCase()===o.key) ||
+                  (o.key && String(item.typ||'').toLowerCase().includes(o.key));
+                return `<option value="${o.key}" ${isSel?'selected':''}>${o.label}</option>`;
+              }).join('')}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Dodávateľ</label>
+            <select class="js-supplier">
+              <option value="">— bez prepojenia —</option>
+              ${suppliers.map(s=>`<option value="${s.id||''}" ${String(s.id||'')==String(item.dodavatel_id||'')?'selected':''}>${txt(s.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="btn-grid" style="margin-top:.75rem;">
+          <button class="btn-secondary js-back">Späť</button>
+          <span></span>
+          <button class="btn-primary js-save"><i class="fa-solid fa-floppy-disk"></i> Uložiť zmeny</button>
+        </div>
+      </div>
+    `);
+
+    body.appendChild(form);
+
+    qs(".js-back", form).addEventListener("click", ()=> renderRaw(shell));
+    qs(".js-save", form).addEventListener("click", async ()=>{
+      const payload = {
+        original_name: originalName,
+        name: qs(".js-name", form).value.trim() || originalName,
+        ean: qs(".js-ean", form).value.trim() || null,
+        mj: qs(".js-mj", form).value.trim() || null,
+        // posielame všetky možné „min“ polia – backend zapíše len tie, ktoré existujú
+        min_mnozstvo: qs(".js-min-mnozstvo", form).value || null,
+        min_stav_kg:  qs(".js-min-stav", form).value || null,
+        min_zasoba:   qs(".js-min-zasoba", form).value || null,
+        nakupna_cena: qs(".js-nakup", form).value || null,
+        default_cena_eur_kg: qs(".js-defcena", form).value || null,
+        // kategória
+        kategoria: qs(".js-typ", form).value || null,
+        typ: (()=>{
+          const k = qs(".js-typ", form).value;
+          if (k === 'koreniny') return 'Koreniny';
+          if (k === 'obal') return 'Obaly - Črevá';
+          if (k === 'pomocny_material') return 'Pomocný materiál';
+          if (k === 'maso') return 'Mäso';
+          return null;
+        })(),
+        dodavatel_id: qs(".js-supplier", form).value || null
+      };
+      try{
+        await apiRequest('/api/kancelaria/stock/saveItem', 'POST', payload);
+        alert('Karta uložená.');
+        renderRaw(shell);
+      }catch(e){ alert('Chyba: '+ e.message); }
+    });
+  }
 
   // ------------- Intake (samostatné zobrazenie so 4 kartami) -------------
   async function loadSuppliersByCategory(cat){
@@ -456,7 +483,6 @@ function attachNumericSanitizer(input, decimals=3){
       return Array.isArray(data?.items) ? data.items : [];
     } catch(e){ return []; }
   }
-
   function buildRowsTable(columns){
     return el(`
       <div class="table-container">
@@ -467,243 +493,195 @@ function attachNumericSanitizer(input, decimals=3){
       </div>
     `);
   }
-function addLineRow(tbody, shell){
-  const tr = el(`<tr>
-    <td><input class="input js-name" placeholder="Názov suroviny"></td>
-    <td><input class="input js-qty" type="text" placeholder="kg"></td>
-    <td><input class="input js-price" type="text" placeholder="€/kg"></td>
-    <td><input class="input js-note" placeholder="Poznámka"></td>
-    <td><button class="btn-danger js-del" title="Odstrániť"><i class="fa-solid fa-xmark"></i></button></td>
-  </tr>`);
-
-  const nameInput  = tr.querySelector('.js-name');
-  const qtyInput   = tr.querySelector('.js-qty');
-  const priceInput = tr.querySelector('.js-price');
-
-  // čísla fix (NumLock/čiarka/bodka)
-  attachNumericSanitizer(qtyInput, 3);
-  attachNumericSanitizer(priceInput, 3);
-
-  // autocomplete len z aktuálnej kategórie + doplnenie poslednej ceny
-  attachAutocomplete(
-    nameInput,
-    Array.isArray(shell?.__allowedNames) ? shell.__allowedNames : [],
-    async (pickedName)=>{
-      const key = (pickedName || '').toLowerCase();
-      let lp = shell?.__lastPriceMap?.get(key) ?? null;
-      if (lp == null){
-        try{
-          const r = await apiRequest(`/api/kancelaria/stock/last-price?name=${encodeURIComponent(pickedName)}`);
-          if (r && r.last_price != null) lp = Number(r.last_price);
-        }catch(_){}
+  function addLineRow(tbody, shell){
+    const tr = el(`<tr>
+      <td><input class="input js-name" placeholder="Názov suroviny"></td>
+      <td><input class="input js-qty" type="text" placeholder="kg"></td>
+      <td><input class="input js-price" type="text" placeholder="€/kg"></td>
+      <td><input class="input js-note" placeholder="Poznámka"></td>
+      <td><button class="btn-danger js-del" title="Odstrániť"><i class="fa-solid fa-xmark"></i></button></td>
+    </tr>`);
+    const nameInput  = tr.querySelector('.js-name');
+    const qtyInput   = tr.querySelector('.js-qty');
+    const priceInput = tr.querySelector('.js-price');
+    attachNumericSanitizer(qtyInput, 3);
+    attachNumericSanitizer(priceInput, 3);
+    attachAutocomplete(
+      nameInput,
+      Array.isArray(shell?.__allowedNames) ? shell.__allowedNames : [],
+      async (pickedName)=>{
+        const key = (pickedName || '').toLowerCase();
+        let lp = shell?.__lastPriceMap?.get(key) ?? null;
+        if (lp == null){
+          try{
+            const r = await apiRequest(`/api/kancelaria/stock/last-price?name=${encodeURIComponent(pickedName)}`);
+            if (r && r.last_price != null) lp = Number(r.last_price);
+          }catch(_){}
+        }
+        if (lp != null && !priceInput.value){
+          priceInput.value = Number(lp).toFixed(3);
+        }
       }
-      if (lp != null && !priceInput.value){
-        priceInput.value = Number(lp).toFixed(3);
-      }
-    }
-  );
-
-  tr.querySelector('.js-del').addEventListener('click', ()=> tr.remove());
-  tbody.appendChild(tr);
-}
-
-
-function getAllowedNamesSet(shell){
-  if (shell && shell.__allowedLower instanceof Set && shell.__allowedLower.size){
-    return shell.__allowedLower;
-  }
-  const set = new Set();
-  const dl = document.getElementById('rm-name-dl');
-  if (!dl) return set;
-  Array.from(dl.querySelectorAll('option')).forEach(opt => {
-    const v = (opt.value || '').trim().toLowerCase();
-    if (v) set.add(v);
-  });
-  return set;
-}
-
-function buildIntakeMaso(shell){
-  const card = el(`<div class="stat-card"></div>`);
-  card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">Príjem – Mäso</h4>`));
-
-  const srcWrap = el(`
-    <div class="form-grid" style="margin-bottom:.75rem">
-      <div class="form-group"><label>Zdroj</label>
-        <select class="js-source">
-          <option value="rozrabka">Rozrábka</option>
-          <option value="expedicia">Expedícia</option>
-          <option value="externy">Externý</option>
-          <option value="ine">Iné</option>
-        </select>
-      </div>
-    </div>
-  `);
-  card.appendChild(srcWrap);
-
-  const table = buildRowsTable([
-    {t:'Názov položky', w:'18rem'},
-    {t:'Množstvo (kg)',  w:'10rem'},
-    {t:'Cena €/kg',      w:'10rem'},
-    {t:'Poznámka',       w:'20rem'},
-    {t:'',               w:'4rem'}
-  ]);
-  card.appendChild(table);
-  const tbody = table.querySelector('tbody');
-
-  addLineRow(tbody, shell);
-  addLineRow(tbody, shell);
-
-  const actions = el(`
-    <div class="btn-grid" style="margin-top:.75rem">
-      <button class="btn-secondary js-add"><i class="fa-solid fa-plus"></i> Pridať riadok</button>
-      <span style="flex:1"></span>
-      <button class="btn-success js-save"><i class="fa-solid fa-floppy-disk"></i> Uložiť príjem</button>
-    </div>
-  `);
-  card.appendChild(actions);
-
-  actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody, shell));
-
-  actions.querySelector('.js-save').addEventListener('click', async ()=>{
-    const source = srcWrap.querySelector('.js-source').value;
-
-    const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => ({
-      category: 'maso',
-      source,
-      name:  (tr.querySelector('.js-name').value || '').trim(),
-      quantity: toNum(tr.querySelector('.js-qty').value),
-      price: tr.querySelector('.js-price').value ? toNum(tr.querySelector('.js-price').value) : null,
-      note:  (tr.querySelector('.js-note').value || '').trim()
-    })).filter(r => r.name && r.quantity>0);
-
-    if (!rows.length){ alert('Pridaj aspoň jednu položku.'); return; }
-
-    const allowed = getAllowedNamesSet(shell);
-    const bad = rows.filter(r => !allowed.has(r.name.toLowerCase()));
-    if (bad.length){
-      alert("Položky mimo kategórie nie je možné prijať:\n - " + bad.map(b=>b.name).join("\n - "));
-      return;
-    }
-
-    try{
-      await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
-      alert('Príjem uložený.');
-      tbody.innerHTML=''; addLineRow(tbody, shell); addLineRow(tbody, shell);
-    }catch(e){ alert('Chyba: '+e.message); }
-  });
-
-  return card;
-}
-
-
-// Mäso – PRÍJEM (so Zdrojom hore, názvy len z existujúcich kariet)
-function buildIntakeNonMaso(shell, cat){
-  const card = el(`<div class="stat-card"></div>`);
-  const titleMap = {koreniny:'Koreniny', obal:'Obaly', pomocny_material:'Pomocný materiál'};
-  card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">Príjem – ${titleMap[cat] || cat}</h4>`));
-
-  const supWrap = el(`
-    <div class="form-grid" style="margin-bottom:.75rem">
-      <div class="form-group"><label>Dodávateľ</label>
-        <select class="js-supplier"><option value="">— vyber dodávateľa —</option></select>
-      </div>
-    </div>
-  `);
-  card.appendChild(supWrap);
-
-  loadSuppliersByCategory(cat).then(list => {
-    supWrap.querySelector('.js-supplier').innerHTML =
-      `<option value="">— vyber dodávateľa —</option>` +
-      list.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-  });
-
-  const table = buildRowsTable([
-    {t:'Názov položky', w:'18rem'},
-    {t:'Množstvo (kg)', w:'10rem'},
-    {t:'Cena €/kg',     w:'10rem'},
-    {t:'Poznámka',      w:'20rem'},
-    {t:'',              w:'4rem'}
-  ]);
-  card.appendChild(table);
-  const tbody = table.querySelector('tbody');
-
-  addLineRow(tbody, shell);
-  addLineRow(tbody, shell);
-
-  const actions = el(`
-    <div class="btn-grid" style="margin-top:.75rem">
-      <button class="btn-secondary js-add"><i class="fa-solid fa-plus"></i> Pridať riadok</button>
-      <span style="flex:1"></span>
-      <button class="btn-success js-save"><i class="fa-solid fa-floppy-disk"></i> Uložiť príjem</button>
-    </div>
-  `);
-  card.appendChild(actions);
-
-  actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody, shell));
-
-  actions.querySelector('.js-save').addEventListener('click', async ()=>{
-    const supplier_id = supWrap.querySelector('.js-supplier').value;
-    if (!supplier_id){ alert('Vyber dodávateľa.'); return; }
-
-    const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => ({
-      category: cat,
-      supplier_id: Number(supplier_id),
-      name:  tr.querySelector('.js-name').value.trim(),
-      quantity: toNum(tr.querySelector('.js-qty').value),
-      price: tr.querySelector('.js-price').value ? toNum(tr.querySelector('.js-price').value) : null,
-      note:  tr.querySelector('.js-note').value.trim()
-    })).filter(r => r.name && r.quantity>0);
-
-    if (!rows.length){ alert('Pridaj aspoň jednu položku.'); return; }
-
-    const allowed = getAllowedNamesSet(shell);
-    const bad = rows.filter(r => !allowed.has(r.name.toLowerCase()));
-    if (bad.length){
-      alert("Položky mimo kategórie nie je možné prijať:\n - " + bad.map(b=>b.name).join("\n - "));
-      return;
-    }
-
-    try{
-      await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
-      alert('Príjem uložený.');
-      tbody.innerHTML=''; addLineRow(tbody, shell); addLineRow(tbody, shell);
-    }catch(e){ alert('Chyba: '+e.message); }
-  });
-
-  return card;
-}
-
-function renderIntake(shell){
-  const body = qs("#stock-body", shell);
-  body.innerHTML = ""; body.setAttribute("data-view","intake");
-
-  const tabs = el(`
-    <div class="btn-grid" style="margin-bottom:.75rem">
-      <button class="btn-secondary js-tab" data-cat="maso">Mäso</button>
-      <button class="btn-secondary js-tab" data-cat="koreniny">Koreniny</button>
-      <button class="btn-secondary js-tab" data-cat="obal">Obaly</button>
-      <button class="btn-secondary js-tab" data-cat="pomocny_material">Pomocný materiál</button>
-      <span style="flex:1"></span>
-    </div>
-  `);
-  const host = el(`<div></div>`);
-  body.appendChild(tabs); body.appendChild(host);
-
-  async function openCat(cat){
-    host.innerHTML = "";
-    shell.__activeIntakeCat = cat;
-    await ensureDatalist(shell, cat); // <<< kľúčové – len názvy danej kategórie
-    if (cat === "maso") host.appendChild(buildIntakeMaso(shell));
-    else host.appendChild(buildIntakeNonMaso(shell, cat));
-    qsa(".js-tab", tabs).forEach(b => b.classList.toggle("btn-primary", b.dataset.cat===cat));
+    );
+    tr.querySelector('.js-del').addEventListener('click', ()=> tr.remove());
+    tbody.appendChild(tr);
   }
 
-  qsa(".js-tab", tabs).forEach(b => b.addEventListener("click", () => openCat(b.dataset.cat)));
-  openCat("maso"); // default
-}
+  function buildIntakeMaso(shell){
+    const card = el(`<div class="stat-card"></div>`);
+    card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">Príjem – Mäso</h4>`));
+    const srcWrap = el(`
+      <div class="form-grid" style="margin-bottom:.75rem">
+        <div class="form-group"><label>Zdroj</label>
+          <select class="js-source">
+            <option value="rozrabka">Rozrábka</option>
+            <option value="expedicia">Expedícia</option>
+            <option value="externy">Externý</option>
+            <option value="ine">Iné</option>
+          </select>
+        </div>
+      </div>
+    `);
+    card.appendChild(srcWrap);
 
+    const table = buildRowsTable([
+      {t:'Názov položky', w:'18rem'},
+      {t:'Množstvo (kg)',  w:'10rem'},
+      {t:'Cena €/kg',      w:'10rem'},
+      {t:'Poznámka',       w:'20rem'},
+      {t:'',               w:'4rem'}
+    ]);
+    card.appendChild(table);
+    const tbody = table.querySelector('tbody');
+    addLineRow(tbody, shell); addLineRow(tbody, shell);
 
-  // ------------- Add item -------------
+    const actions = el(`
+      <div class="btn-grid" style="margin-top:.75rem">
+        <button class="btn-secondary js-add"><i class="fa-solid fa-plus"></i> Pridať riadok</button>
+        <span style="flex:1"></span>
+        <button class="btn-success js-save"><i class="fa-solid fa-floppy-disk"></i> Uložiť príjem</button>
+      </div>
+    `);
+    card.appendChild(actions);
+
+    actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody, shell));
+    actions.querySelector('.js-save').addEventListener('click', async ()=>{
+      const source = srcWrap.querySelector('.js-source').value;
+      const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => ({
+        category: 'maso',
+        source,
+        name:  (tr.querySelector('.js-name').value || '').trim(),
+        quantity: toNum(tr.querySelector('.js-qty').value),
+        price: tr.querySelector('.js-price').value ? toNum(tr.querySelector('.js-price').value) : null,
+        note:  (tr.querySelector('.js-note').value || '').trim()
+      })).filter(r => r.name && r.quantity>0);
+      if (!rows.length){ alert('Pridaj aspoň jednu položku.'); return; }
+      const allowed = getAllowedNamesSet(shell);
+      const bad = rows.filter(r => !allowed.has(r.name.toLowerCase()));
+      if (bad.length){ alert("Položky mimo kategórie nie je možné prijať:\n - " + bad.map(b=>b.name).join("\n - ")); return; }
+      try{
+        await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
+        alert('Príjem uložený.'); tbody.innerHTML=''; addLineRow(tbody, shell); addLineRow(tbody, shell);
+      }catch(e){ alert('Chyba: '+e.message); }
+    });
+
+    return card;
+  }
+
+  function buildIntakeNonMaso(shell, cat){
+    const card = el(`<div class="stat-card"></div>`);
+    const titleMap = {koreniny:'Koreniny', obal:'Obaly', pomocny_material:'Pomocný materiál'};
+    card.appendChild(el(`<h4 style="margin:0 0 .5rem 0;">Príjem – ${titleMap[cat] || cat}</h4>`));
+    const supWrap = el(`
+      <div class="form-grid" style="margin-bottom:.75rem">
+        <div class="form-group"><label>Dodávateľ</label>
+          <select class="js-supplier"><option value="">— vyber dodávateľa —</option></select>
+        </div>
+      </div>
+    `);
+    card.appendChild(supWrap);
+
+    loadSuppliersByCategory(cat).then(list => {
+      supWrap.querySelector('.js-supplier').innerHTML =
+        `<option value="">— vyber dodávateľa —</option>` +
+        list.map(s => `<option value="${s.id}">${txt(s.name)}</option>`).join('');
+    });
+
+    const table = buildRowsTable([
+      {t:'Názov položky', w:'18rem'},
+      {t:'Množstvo (kg)', w:'10rem'},
+      {t:'Cena €/kg',     w:'10rem'},
+      {t:'Poznámka',      w:'20rem'},
+      {t:'',              w:'4rem'}
+    ]);
+    card.appendChild(table);
+    const tbody = table.querySelector('tbody');
+    addLineRow(tbody, shell); addLineRow(tbody, shell);
+
+    const actions = el(`
+      <div class="btn-grid" style="margin-top:.75rem">
+        <button class="btn-secondary js-add"><i class="fa-solid fa-plus"></i> Pridať riadok</button>
+        <span style="flex:1"></span>
+        <button class="btn-success js-save"><i class="fa-solid fa-floppy-disk"></i> Uložiť príjem</button>
+      </div>
+    `);
+    card.appendChild(actions);
+
+    actions.querySelector('.js-add').addEventListener('click', ()=> addLineRow(tbody, shell));
+    actions.querySelector('.js-save').addEventListener('click', async ()=>{
+      const supplier_id = supWrap.querySelector('.js-supplier').value;
+      if (!supplier_id){ alert('Vyber dodávateľa.'); return; }
+      const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => ({
+        category: cat,
+        supplier_id: Number(supplier_id),
+        name:  tr.querySelector('.js-name').value.trim(),
+        quantity: toNum(tr.querySelector('.js-qty').value),
+        price: tr.querySelector('.js-price').value ? toNum(tr.querySelector('.js-price').value) : null,
+        note:  tr.querySelector('.js-note').value.trim()
+      })).filter(r => r.name && r.quantity>0);
+      if (!rows.length){ alert('Pridaj aspoň jednu položku.'); return; }
+      const allowed = getAllowedNamesSet(shell);
+      const bad = rows.filter(r => !allowed.has(r.name.toLowerCase()));
+      if (bad.length){ alert("Položky mimo kategórie nie je možné prijať:\n - " + bad.map(b=>b.name).join("\n - ")); return; }
+      try{
+        await apiRequest('/api/kancelaria/stock/receiveProduction', 'POST', { items: rows });
+        alert('Príjem uložený.'); tbody.innerHTML=''; addLineRow(tbody, shell); addLineRow(tbody, shell);
+      }catch(e){ alert('Chyba: '+e.message); }
+    });
+
+    return card;
+  }
+
+  function renderIntake(shell){
+    const body = qs("#stock-body", shell);
+    body.innerHTML = ""; body.setAttribute("data-view","intake");
+
+    const tabs = el(`
+      <div class="btn-grid" style="margin-bottom:.75rem">
+        <button class="btn-secondary js-tab" data-cat="maso">Mäso</button>
+        <button class="btn-secondary js-tab" data-cat="koreniny">Koreniny</button>
+        <button class="btn-secondary js-tab" data-cat="obal">Obaly</button>
+        <button class="btn-secondary js-tab" data-cat="pomocny_material">Pomocný materiál</button>
+        <span style="flex:1"></span>
+      </div>
+    `);
+    const host = el(`<div></div>`);
+    body.appendChild(tabs); body.appendChild(host);
+
+    async function openCat(cat){
+      host.innerHTML = "";
+      shell.__activeIntakeCat = cat;
+      await ensureDatalist(shell, cat); // názvy iba z danej kategórie
+      if (cat === "maso") host.appendChild(buildIntakeMaso(shell));
+      else host.appendChild(buildIntakeNonMaso(shell, cat));
+      qsa(".js-tab", tabs).forEach(b => b.classList.toggle("btn-primary", b.dataset.cat===cat));
+    }
+
+    qsa(".js-tab", tabs).forEach(b => b.addEventListener("click", () => openCat(b.dataset.cat)));
+    openCat("maso"); // default
+  }
+
+  // ------------- Pridať položku -------------
   function buildAddItemPanel(shell){
     const node = el(`
       <div class="stat-card">
@@ -757,16 +735,13 @@ function renderIntake(shell){
 
     return node;
   }
-
   function renderAddItem(shell){
     const body = qs("#stock-body", shell);
     body.innerHTML = ""; body.setAttribute("data-view","add");
-    const title = el(`<div class="stat-card"><h4 style="margin:0 0 .5rem 0;">Pridať položku do výrobného skladu</h4></div>`);
-    body.appendChild(title);
     body.appendChild(buildAddItemPanel(shell));
   }
 
-  // ------------- Suppliers (voliteľné) -------------
+  // ------------- Suppliers (CRUD) -------------
   async function renderSuppliers(shell){
     const body = qs("#stock-body", shell);
     body.innerHTML = ""; body.appendChild(loading()); body.setAttribute("data-view","suppliers");

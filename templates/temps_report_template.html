@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <title>Report teplôt – {{ date.strftime('%d.%m.%Y') }}</title>
+  <style>
+    body{ font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:15mm; }
+    .report-container{ max-width: 980px; margin:0 auto; background:#fff; box-shadow:0 4px 10px rgba(0,0,0,.08); padding:16px 20px; }
+    .hdr{ text-align:center; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin-bottom:12px; }
+    h1{ font-size:18pt; margin:0; }
+    h2{ font-size:14pt; margin:18px 0 6px; border-bottom:1px solid #eee; padding-bottom:4px;}
+    table{ width:100%; border-collapse: collapse; font-size:10pt; margin-top:6px; }
+    th,td{ border:1px solid #e5e7eb; padding:6px 8px; text-align:left; }
+    th{ background:#f9fafb; }
+    .off{ color:#991b1b; font-weight:600; }
+    .meta{ color:#6b7280; font-size:9pt; }
+  </style>
+</head>
+<body>
+ <div class="hdr">
+  <h1>Report teplôt – {{ date.strftime('%d.%m.%Y') }}</h1>
+  <div class="meta">Rozsah: 00:00 – {{ range_end_label or '23:59' }} (15-min intervaly)</div>
+</div>
+
+
+    {% for b in buckets %}
+      <h2>Zariadenie #{{ b.device.id }} – {{ b.device.name }} ({{ b.device.code }}) · {{ b.device.location }} ·
+        {% if b.device.device_type=='CHLAD' %}Chladiaci box{% elif b.device.device_type=='MRAZ' %}Mraziaci box{% else %}Priestor – rozrábka{% endif %}
+      </h2>
+      <table>
+        <thead>
+          <tr><th>Čas</th><th>Teplota (°C)</th><th>Stav</th></tr>
+        </thead>
+        <tbody>
+          {% if b.rows and b.rows|length>0 %}
+            {% for r in b.rows %}
+              <tr>
+                <td>{{ r.ts.strftime('%H:%M') }}</td>
+                <td>{% if r.status=='OK' %}{{ '%.1f'|format(r.temperature) }}{% else %}—{% endif %}</td>
+                <td>{% if r.status=='OK' %}OK{% else %}<span class="off">BOX VYPNUTÝ</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="3">Žiadne záznamy.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    {% endfor %}
+  </div>
+</body>
+</html>

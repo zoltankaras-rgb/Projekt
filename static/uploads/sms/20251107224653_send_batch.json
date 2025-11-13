@@ -1,0 +1,35 @@
+{
+  "request": {
+    "auth": {
+      "apikey": "e84bbe41-a3d7-4937-9113-e5adaac17b54"
+    },
+    "data": {
+      "message": "MIK: objednavka B2C-9-20251107221130 je pripravena na vyzdvihnutie. Suma 0.00 €.",
+      "sender": {
+        "text": "MIK"
+      },
+      "recipients": [
+        {
+          "phonenr": "+421907114726"
+        }
+      ],
+      "simple_text": "true"
+    }
+  },
+  "response": {
+    "id": "OK",
+    "data": {
+      "batch_id": "32950592",
+      "recipients": {
+        "accepted": [
+          {
+            "msg_id": 50766102,
+            "phonenr": "+421907114726"
+          }
+        ],
+        "rejected": {}
+      }
+    },
+    "note": null
+  }
+}

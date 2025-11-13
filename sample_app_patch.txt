@@ -1,0 +1,25 @@
+
+# Minimal changes to your Flask app (app.py)
+
+# 1) Import and init storage early (after creating app):
+from init_storage import init_storage
+init_storage()
+
+# 2) Register secure files blueprint:
+from secure_files import files_bp
+app.register_blueprint(files_bp, url_prefix="/files")
+
+# 3) Use storage helpers for saving uploads:
+#    from storage import save_upload, save_bytes, write_json, read_json
+
+# Example in a route handling file upload:
+# file = request.files.get("file")
+# saved_path = save_upload(file, folder="uploads")
+# return {"saved": saved_path}
+
+# 4) Example for saving order PDF:
+# pdf_bytes = render_invoice_pdf(order_id)
+# save_bytes(pdf_bytes, "invoices", f"invoice_{order_id}.pdf")
+
+# 5) Serving file securely:
+# GET /files/invoices/invoice_123.pdf    (authorization is checked in blueprint)

@@ -1,0 +1,26 @@
+{
+  "order_number": "B2C-9-20251104094901",
+  "deliveryDate": "2025-11-07",
+  "note": "sadsadasdasdasdasd",
+  "customerName": "Zoltán Káras",
+  "customerLoginId": "720381973773",
+  "customerAddress": "Hollého č.1999/13",
+  "customerEmail": "miksro@slovanet.sk",
+  "items": [
+    {
+      "ean": "1000000000002",
+      "name": "Klobása papriková",
+      "quantity": 25,
+      "unit": "kg",
+      "item_note": "",
+      "price_bez_dph": 3.85,
+      "price_s_dph": 4.235,
+      "dph_percent": 10.0
+    }
+  ],
+  "totalNet": 96.25,
+  "totalVat": 9.625000000000014,
+  "totalGross": 105.87500000000001,
+  "order_date": "04.11.2025",
+  "uplatnena_odmena_poznamka": null
+}

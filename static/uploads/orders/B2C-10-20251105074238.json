@@ -1,0 +1,38 @@
+{
+  "order_number": "B2C-10-20251105074238",
+  "deliveryDate": "2025-11-06",
+  "note": "dasdasdasd",
+  "customerName": "Zoltán Káras 1990",
+  "customerLoginId": "326157468361",
+  "customerAddress": "Hollého č.1999/13",
+  "customerEmail": "zoltankaras@miksro.sk",
+  "items": [
+    {
+      "ean": "21101",
+      "name": "Hoväzdie zadné",
+      "quantity": 15.0,
+      "unit": "kg",
+      "item_note": "",
+      "price_bez_dph": 9.5,
+      "price_s_dph": 9.975,
+      "dph_percent": 5.0,
+      "nazov": "Hoväzdie zadné",
+      "mnozstvo": 15.0,
+      "mj": "kg",
+      "cena_bez_dph": 9.5,
+      "cena_s_dph": 9.975,
+      "dph": 5.0,
+      "line_total_bez_dph": 142.5,
+      "line_total_s_dph": 149.62
+    }
+  ],
+  "totalNet": 142.5,
+  "totalVat": 7.12,
+  "totalGross": 149.62,
+  "total_vat": 7.12,
+  "suma_bez_dph": 142.5,
+  "suma_s_dph": 149.62,
+  "dph": 7.12,
+  "order_date": "05.11.2025",
+  "uplatnena_odmena_poznamka": "Darčekové balenie"
+}

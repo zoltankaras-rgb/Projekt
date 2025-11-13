@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <title>Rozrábka #{{ header.id }} – {{ header.breakdown_date }}</title>
+  <style>
+    body{ font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:12mm; }
+    .paper{ max-width:980px; margin:0 auto; background:#fff; box-shadow:0 4px 10px rgba(0,0,0,.08); padding:14px 16px; }
+    h1{ font-size:18pt; margin:0 0 6px; }
+    h2{ font-size:14pt; margin:14px 0 6px; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
+    table{ width:100%; border-collapse: collapse; font-size:10pt; margin-top:6px; }
+    th,td{ border:1px solid #e5e7eb; padding:6px 8px; text-align:left; }
+    th{ background:#f9fafb; }
+    .meta{ color:#6b7280; font-size:9pt; }
+  </style>
+</head>
+<body>
+  <div class="paper">
+    <h1>Rozrábka #{{ header.id }} – {{ header.breakdown_date }}</h1>
+    <div class="meta">
+      Surovina ID {{ header.material_id }} · Dodávateľ: {{ header.supplier or '-' }} · Vstup {{ '%.3f'|format(header.input_weight_kg) }} kg ·
+      Nákup spolu {{ '%.2f'|format(header.purchase_total_cost_eur or 0) }} € ({{ '%.4f'|format(header.purchase_unit_price_eur_kg or 0) }} €/kg)
+    </div>
+
+    <h2>Výstupy</h2>
+    <table>
+      <thead><tr><th>Produkt</th><th>Váha (kg)</th></tr></thead>
+      <tbody>
+        {% for o in outputs %}
+          <tr><td>{{ o.product_name }}</td><td>{{ '%.3f'|format(o.weight_kg) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if extras and extras|length>0 %}
+    <h2>Dodatočné náklady</h2>
+    <table>
+      <thead><tr><th>Náklad</th><th>Suma (€)</th></tr></thead>
+      <tbody>
+        {% for e in extras %}<tr><td>{{ e.name }}</td><td>{{ '%.2f'|format(e.amount_eur) }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <h2>Výsledky (výťažnosti, náklady, marže)</h2>
+    <table>
+      <thead>
+        <tr><th>Kód</th><th>Produkt</th><th>Váha (kg)</th><th>Výťažnosť (%)</th><th>Náklad €/kg</th><th>Predaj €/kg</th><th>Marža €/kg</th><th>Zisk (€)</th></tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+          <tr>
+            <td>{{ r.product_code }}</td>
+            <td>{{ r.product_name }}</td>
+            <td>{{ '%.3f'|format(r.weight_kg) }}</td>
+            <td>{{ '%.4f'|format(r.yield_pct) }}</td>
+            <td>{{ '%.4f'|format(r.cost_per_kg_eur) }}</td>
+            <td>{{ '%.3f'|format(r.selling_price_eur_kg_snap) }}</td>
+            <td>{{ '%.4f'|format(r.margin_eur_per_kg) }}</td>
+            <td>{{ '%.2f'|format(r.profit_eur) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+</body>
+</html>
